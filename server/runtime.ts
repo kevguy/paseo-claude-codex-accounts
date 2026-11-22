@@ -13,6 +13,8 @@ type Providers = Record<string, unknown> | undefined;
 type Agent = NonNullable<ReturnType<ReturnType<PaseoApi["agents"]["ref"]>["current"]>>;
 /** Readings older than this count as unknown when choosing where a chat goes. */
 const READING_MAX_AGE_MS = 10 * 60_000;
+/** How long a manual switch waits for a chat to go idle, inside Paseo's 30-second request limit. */
+const MANUAL_IDLE_WAIT_MS = 15_000;
 type Ranked = Row & { state: AccountChoice["state"]; email?: string; detail?: string };
 
 export interface RuntimeDeps {
@@ -20,6 +22,8 @@ export interface RuntimeDeps {
   settings(): Promise<SwitchingOptions>;
   headroom: HeadroomDeps;
   now(): number;
+  /** How long a manual switch waits for the chat to go idle (default 15 s, under Paseo's 30-second request limit). */
+  manualIdleWaitMs?: number;
   /** Logs problems that a user can't act on. Never pass tokens or file contents. */
   log(message: string): void;
 }
@@ -88,7 +92,9 @@ export class AccountsRuntime {
     const settings = await this.deps.settings();
     const snap = await this.snapshot(paseo);
     const metadata: Record<string, JsonValue> = { ...(request.metadata ?? {}) };
-    if (metaString(metadata, META_ACCOUNT) === AUTO_ACCOUNT || settings.newChats === "most-headroom") await this.freshen(snap.ranked);
+    // Re-read usage only when the choice may come down to headroom.
+    const chosen = metaString(metadata, META_ACCOUNT);
+    if (chosen === AUTO_ACCOUNT || (!chosen && settings.newChats === "most-headroom")) await this.freshen(snap.ranked);
     const choice = accountForNewChat(
       { provider: request.config.provider, cwd: request.config.cwd, metadata },
       snap.rows,
@@ -123,8 +129,9 @@ export class AccountsRuntime {
     }
     // Paseo fails the open when a hook throws, so a config read that fails must not block every chat.
     let snap: Awaited<ReturnType<AccountsRuntime["snapshot"]>>;
+    let settings: SwitchingOptions;
     try {
-      snap = await this.snapshot(paseo, false);
+      [snap, settings] = await Promise.all([this.snapshot(paseo, false), this.deps.settings()]);
     } catch (error) {
       this.deps.log(`Accounts plugin couldn't read accounts while opening a chat: ${(error as Error).message}`);
       return;
@@ -146,7 +153,6 @@ export class AccountsRuntime {
       }
     }
     const env = sessionEnv({ provider: request.provider, metadata }, snap.rows, snap.providers);
-    const settings = await this.deps.settings();
     const tools = settings.agentTools && request.purpose === "interactive" ? [...request.tools, ...this.tools(paseo)] : null;
     if (!env && !tools) return;
     return { ...request, ...(env ? { env: { ...request.env, ...env } } : {}), ...(tools ? { tools } : {}) };
@@ -228,8 +234,8 @@ export class AccountsRuntime {
     const settings = await this.deps.settings();
     const handle = paseo.agents.ref(agent.id);
     const resets = new Date(limit.until).toISOString();
-    await this.freshen(snap.ranked, kind);
     if (kind === "codex") {
+      await this.freshen(snap.ranked, "codex");
       const other = this.best(snap.ranked, "codex", { exclude: [from.id] });
       if (!other && settings.waitForReset) return this.waitForReset(paseo, agent.id, from, limit.until, failedAt);
       await this.note(handle, switchRow(from, null, "stuck", other ? `Codex chats stay on their account. Start a new chat on ${other.label} to keep going.` : `Every Codex account is at a limit. ${from.label} resets ${resets}.`));
@@ -243,6 +249,7 @@ export class AccountsRuntime {
       await this.note(handle, switchRow(from, null, "stuck", "This chat already switched accounts several times in the last 10 minutes, so it stopped switching automatically to avoid a loop."));
       return;
     }
+    await this.freshen(snap.ranked, "claude");
     const target = this.best(snap.ranked, "claude", { exclude: [from.id] });
     if (!target) {
       const claudeIds = new Set(snap.rows.filter((row) => row.kind === "claude").map((row) => row.id));
@@ -310,12 +317,12 @@ export class AccountsRuntime {
   }
 
   /** Moves a Claude chat to another login and reopens it. Returns whether it moved. */
-  async move(paseo: PaseoApi, agentId: string, target: Row, reason: "manual" | "limit" | "headroom", detail?: string): Promise<boolean> {
+  async move(paseo: PaseoApi, agentId: string, target: Row, reason: "manual" | "limit" | "headroom", detail?: string, idleTimeoutMs?: number): Promise<boolean> {
     return this.lock.run(agentId, async () => {
       const handle = paseo.agents.ref(agentId);
       // Read the accounts first, so nothing slow sits between "the chat is idle" and the reopen.
       const snap = await this.snapshot(paseo, false);
-      const agent = await waitUntilIdle(handle);
+      const agent = await waitUntilIdle(handle, idleTimeoutMs);
       if (!agent) return false;
       const from = currentAccount(agent, snap.rows, snap.providers);
       if (from?.id === target.id) return false;
@@ -404,7 +411,9 @@ export class AccountsRuntime {
       return { ok: true as const, label: target.label, deferred: true };
     }
     this.pending.delete(agentId);
-    if (await this.move(paseo, agentId, target, "manual")) return { ok: true as const, label: target.label, deferred: false };
+    // Paseo gives a plugin request 30 seconds, so a manual move waits less than that for the chat to
+    // go idle, and is queued for the end of the turn if a turn outlasts the wait.
+    if (await this.move(paseo, agentId, target, "manual", undefined, this.deps.manualIdleWaitMs ?? MANUAL_IDLE_WAIT_MS)) return { ok: true as const, label: target.label, deferred: false };
     // It didn't move: already there, gone, or a turn started and outlasted the wait.
     await handle.refresh();
     const now = handle.current();

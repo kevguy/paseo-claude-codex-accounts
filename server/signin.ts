@@ -87,7 +87,7 @@ export class SignIns {
     const [name, ...prefix] = configuredCommand(input.kind, input.providers);
     const resolved = await resolveCommand(name!, this.deps.env, this.deps.platform);
     if (!resolved) throw new Error(`Couldn't find the ${input.kind} command on this computer. Install it, or sign in from a terminal.`);
-    // A Windows .cmd shim needs a shell; the arguments the login modules pass are fixed, never user text.
+    // A Windows .cmd shim needs a shell; the login modules check every argument before using one.
     const command = [resolved, ...prefix];
     const env = { ...this.deps.env, PATH: [dirname(resolved), this.deps.env.PATH ?? ""].filter(Boolean).join(delimiter) };
     const id = randomUUID();

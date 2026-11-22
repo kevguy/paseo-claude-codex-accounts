@@ -129,6 +129,7 @@ export async function startClaudeLogin(configDir: string | null, deps: ClaudeLog
       signalResponse?.();
     }
   });
+  // Paseo gives a plugin request 30 seconds, so give up on the CLI's link well before that.
   startTimer = setTimeout(() => {
     if (startValue || exited) return;
     rejectStart(new Error("Timed out waiting for Claude sign-in URL."));
@@ -137,7 +138,7 @@ export async function startClaudeLogin(configDir: string | null, deps: ClaudeLog
     killTimer = setTimeout(() => { if (!exited) child.kill("SIGKILL"); }, 2_000);
     if (poll) clearInterval(poll);
     void Promise.all([rm(outputFile, { force: true }), rm(shimFile, { force: true })]);
-  }, deps.timeoutMs ?? 30_000);
+  }, deps.timeoutMs ?? 20_000);
   if (useShim) {
     poll = setInterval(() => {
       void readFile(outputFile, "utf8").then((value) => { const captured = value.trim(); if (captured.startsWith("http")) localUrl = captured; }).catch(() => undefined);

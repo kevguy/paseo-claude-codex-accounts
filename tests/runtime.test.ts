@@ -58,6 +58,7 @@ interface HarnessOptions {
   signedOut?: string[];
   usage?: Record<string, number | null>;
   onReload?: () => void | Promise<void>;
+  manualIdleWaitMs?: number;
 }
 
 async function createHarness(options: HarnessOptions = {}) {
@@ -136,6 +137,7 @@ async function createHarness(options: HarnessOptions = {}) {
     headroom,
     now: () => nowRef.value,
     log: (message) => logs.push(message),
+    ...(options.manualIdleWaitMs ? { manualIdleWaitMs: options.manualIdleWaitMs } : {}),
   };
   const runtime = new AccountsRuntime(runtimeDeps);
   return {
@@ -371,13 +373,26 @@ test("failover ignores an old 100 percent reading once the account's limit has r
   h.used["claude-team"] = 100;
   await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-work")!);
   await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-team")!);
-  // Work's window has since reset.
+  // Work's window has since reset; Team is still at its limit. Accounts are listed by id, so Team
+  // comes first and wins a tie: only a fresh reading (not "unknown" for both) can pick Work.
   h.used["claude-work"] = 5;
   h.nowRef.value += 60 * 60_000;
   await h.runtime.onTurnEnd(turnPayload(h, failure("You've hit your limit · resets 3pm (UTC)")), h.paseo);
   assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "limit");
 }));
+test("switchTo queues the move, inside Paseo's request limit, when a turn starts and outlasts the wait", async () => withHarness(async (h) => {
+  // The chat is idle when asked, then a queued message starts a turn that keeps running.
+  const refresh = h.handle.refresh.bind(h.handle);
+  let refreshes = 0;
+  h.handle.refresh = async () => { await refresh(); if (++refreshes === 2) h.agent.status = "running"; };
+  const result = await h.runtime.switchTo(h.paseo, h.agent.id, "claude-work");
+  assert.equal(result.deferred, true);
+  assert.equal(h.calls.reload, 0);
+  h.agent.status = "idle";
+  await h.runtime.onTurnEnd(turnPayload(h, completed), h.paseo);
+  assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
+}, { manualIdleWaitMs: 50 }));
 test("switchTo rejects Codex account switches", async () => withHarness(async (h) => {
   h.agent.provider = "codex";
   await assert.rejects(h.runtime.switchTo(h.paseo, h.agent.id, "codex-work"), /Codex chats stay on the account/);

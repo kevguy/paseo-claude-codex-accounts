@@ -354,6 +354,25 @@ test("HeadroomCache records a failed read as unknown usage", async () => {
   assert.deepEqual(await cache.get(byId("claude")), { usedPct: null });
   assert.deepEqual(cache.peek("claude"), { usedPct: null });
 });
+test("HeadroomCache snapshot leaves out readings older than the age asked for", async () => {
+  let now = 0;
+  const cache = new HeadroomCache(cacheDeps({ now: () => now }));
+  await cache.get(byId("claude"));
+  now = 11 * 60_000;
+  await cache.get(byId("codex"));
+  assert.deepEqual([...cache.snapshot(10 * 60_000).keys()], ["codex"]);
+  assert.deepEqual([...cache.snapshot().keys()].sort(), ["claude", "codex"]);
+});
+test("HeadroomCache refresh stops waiting on a usage endpoint that hangs", async () => {
+  const cache = new HeadroomCache(cacheDeps({ fetch: {
+    claude: () => new Promise(() => undefined), codex: async () => availableReport([{ id: "week", label: "Week", shortLabel: "wk", usedPct: 18 }]),
+  } }));
+  const started = Date.now();
+  await cache.refresh([byId("claude"), byId("codex")], 0, 50);
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(cache.peek("claude"), undefined);
+  assert.equal(cache.peek("codex")?.usedPct, 18);
+});
 test("HeadroomCache exposes cached readings through snapshot", async () => {
   const cache = new HeadroomCache(cacheDeps());
   await cache.get(byId("claude"));
