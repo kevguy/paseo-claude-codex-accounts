@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { startCodexLogin, type CodexLoginDeps } from "../server/codex-login";
@@ -10,7 +10,11 @@ const validationRoot = join(process.cwd(), ".validation");
 let fixtureRoot: string;
 let homeNumber = 0;
 async function makeHome() {
-  fixtureRoot ??= await mkdtemp(join(validationRoot, "codex-login-"));
+  if (!fixtureRoot) {
+    // Test files run in parallel, so don't count on another one having made .validation.
+    await mkdir(validationRoot, { recursive: true });
+    fixtureRoot = await mkdtemp(join(validationRoot, "codex-login-"));
+  }
   return mkdtemp(join(fixtureRoot, `home-${process.pid}-${homeNumber++}-`));
 }
 after(async () => { if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true }); });

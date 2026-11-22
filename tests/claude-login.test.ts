@@ -89,7 +89,8 @@ test("accepts a valid code when the CLI exits successfully", async () => {
   assert.deepEqual(await session.done, { ok: true });
 });
 
-test("captures localhost URL from the POSIX BROWSER shim and removes output on cancel", async () => {
+// The BROWSER shim is a POSIX shell script; on Windows the link comes from stdout only.
+test("captures localhost URL from the POSIX BROWSER shim and removes output on cancel", { skip: process.platform === "win32" }, async () => {
   const root = track(await mkdtemp(join(await validationDir(), "claude-login-test-")));
   const session = await startClaudeLogin(join(root, "config"), {
     spawn, command: [process.execPath, fixture], platform: process.platform,
