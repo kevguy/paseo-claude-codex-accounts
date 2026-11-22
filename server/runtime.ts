@@ -3,19 +3,21 @@ import type { PluginHookContext, PluginHookPayload, PluginHookResult } from "@ge
 import type { AccountKind } from "../shared/accounts";
 import { defineAgentTool } from "@getpaseo/plugin/server";
 import { z } from "zod";
-import { AUTO_ACCOUNT, DEFAULT_SETTINGS, LABEL_ACCOUNT, META_ACCOUNT, META_AGENT, type AccountChoice, type BatonSettings } from "../shared/baton";
+import { AUTO_ACCOUNT, DEFAULT_SETTINGS, LABEL_ACCOUNT, META_ACCOUNT, META_AGENT, type AccountChoice, type SwitchingOptions } from "../shared/switching";
 import { accountsFromConfig, listAccounts, type Host } from "./accounts";
-import { type JsonValue, CONTINUE_PROMPT, RESUME_PROMPT, KeyedLock, SwitchGuard, accountForNewChat, currentAccount, limitFromFailure, metaString, pickAccount, providerAccount, providerKind, sessionEnv, switchRow, type Limited, type Row } from "./baton";
+import { type JsonValue, CONTINUE_PROMPT, RESUME_PROMPT, KeyedLock, SwitchGuard, accountForNewChat, currentAccount, limitFromFailure, metaString, pickAccount, providerAccount, providerKind, sessionEnv, switchRow, type Limited, type Row } from "./switching";
 import { HeadroomCache, type HeadroomDeps } from "./headroom";
 
 type PaseoApi = PluginHookContext["paseo"];
 type Providers = Record<string, unknown> | undefined;
 type Agent = NonNullable<ReturnType<ReturnType<PaseoApi["agents"]["ref"]>["current"]>>;
+/** Readings older than this count as unknown when choosing where a chat goes. */
+const READING_MAX_AGE_MS = 10 * 60_000;
 type Ranked = Row & { state: AccountChoice["state"]; email?: string; detail?: string };
 
 export interface RuntimeDeps {
   host(paseo: PaseoApi): Host;
-  settings(): Promise<BatonSettings>;
+  settings(): Promise<SwitchingOptions>;
   headroom: HeadroomDeps;
   now(): number;
   /** Logs problems that a user can't act on. Never pass tokens or file contents. */
@@ -35,7 +37,7 @@ async function waitUntilIdle(handle: ReturnType<PaseoApi["agents"]["ref"]>, time
   }
 }
 
-export class BatonRuntime {
+export class AccountsRuntime {
   readonly headroom: HeadroomCache;
   readonly limited = new Map<string, Limited>();
   private readonly guard = new SwitchGuard();
@@ -51,12 +53,12 @@ export class BatonRuntime {
     this.headroom = new HeadroomCache(deps.headroom);
   }
 
-  private async snapshot(paseo: PaseoApi) {
+  private async snapshot(paseo: PaseoApi, withStatus = true) {
     const host = this.deps.host(paseo);
     const { config } = await host.config.get();
     const providers: Providers = config.providers;
     const rows = accountsFromConfig(providers, host);
-    const accounts = await listAccounts(host);
+    const accounts = withStatus ? await listAccounts(host) : [];
     const byId = new Map(accounts.map((account) => [account.id, account.status]));
     const ranked: Ranked[] = rows.map((row) => {
       const status = byId.get(row.id);
@@ -66,8 +68,18 @@ export class BatonRuntime {
     return { host, providers, rows, ranked };
   }
 
+  /**
+   * The best account to move to. Rankings use only recent readings (an old 100% must not rule out
+   * an account whose limit has since reset), so call `freshen` first.
+   */
   private best(ranked: readonly Ranked[], kind: AccountKind, options: { exclude?: string[]; maxUsedPct?: number } = {}) {
-    return pickAccount(ranked.filter((row) => row.kind === kind), this.headroom.snapshot(), this.limited, this.deps.now(), options);
+    return pickAccount(ranked.filter((row) => row.kind === kind), this.headroom.snapshot(READING_MAX_AGE_MS), this.limited, this.deps.now(), options);
+  }
+
+  /** Re-reads the usage of the accounts a pick could choose, without waiting long on slow endpoints. */
+  private async freshen(ranked: readonly Ranked[], kind?: AccountKind) {
+    const candidates = ranked.filter((row) => (!kind || row.kind === kind) && row.enabled && row.state === "signed-in");
+    await this.headroom.refresh(candidates, READING_MAX_AGE_MS);
   }
 
   // ---- Hooks ----
@@ -76,6 +88,7 @@ export class BatonRuntime {
     const settings = await this.deps.settings();
     const snap = await this.snapshot(paseo);
     const metadata: Record<string, JsonValue> = { ...(request.metadata ?? {}) };
+    if (metaString(metadata, META_ACCOUNT) === AUTO_ACCOUNT || settings.newChats === "most-headroom") await this.freshen(snap.ranked);
     const choice = accountForNewChat(
       { provider: request.config.provider, cwd: request.config.cwd, metadata },
       snap.rows,
@@ -108,19 +121,28 @@ export class BatonRuntime {
       const agentId = request.agentId;
       setTimeout(() => void paseo.agents.ref(agentId).setMetadata({ [META_AGENT]: agentId }).catch(() => undefined), 50);
     }
-    const snap = await this.snapshot(paseo);
+    // Paseo fails the open when a hook throws, so a config read that fails must not block every chat.
+    let snap: Awaited<ReturnType<AccountsRuntime["snapshot"]>>;
+    try {
+      snap = await this.snapshot(paseo, false);
+    } catch (error) {
+      this.deps.log(`Accounts plugin couldn't read accounts while opening a chat: ${(error as Error).message}`);
+      return;
+    }
     let metadata = request.metadata;
     // A label names the account to start on (scripts, orchestrators, `paseo import`). It applies when
     // the chat first opens; after that the chat's own choice, which later switches update, wins.
     const labelled = request.labels[LABEL_ACCOUNT];
     if ((request.reason === "create" || request.reason === "import") && labelled && metaString(metadata, META_ACCOUNT) !== labelled) {
       const row = snap.rows.find((item) => item.id === labelled);
-      if (row && row.kind === providerKind(request.provider, snap.providers)) {
+      // Only Claude chats change login in place. A Codex chat's account is its provider, which
+      // can't change once the chat exists, so a Codex label is reported rather than recorded.
+      if (row && row.kind === "claude" && providerKind(request.provider, snap.providers) === "claude") {
         metadata = { ...metadata, [META_ACCOUNT]: labelled };
         const agentId = request.agentId;
         setTimeout(() => void paseo.agents.ref(agentId).setMetadata({ [META_ACCOUNT]: labelled }).catch(() => undefined), 50);
       } else {
-        this.deps.log(`Baton: label ${LABEL_ACCOUNT}=${labelled} doesn't name an account this chat can use`);
+        this.deps.log(`Accounts plugin: label ${LABEL_ACCOUNT}=${labelled} doesn't name a Claude account this chat can use. For Codex, start the chat with --provider ${labelled}.`);
       }
     }
     const env = sessionEnv({ provider: request.provider, metadata }, snap.rows, snap.providers);
@@ -134,7 +156,7 @@ export class BatonRuntime {
   private tools(paseo: PaseoApi) {
     return [
       defineAgentTool({
-        name: "baton_accounts",
+        name: "accounts_list",
         title: "List accounts",
         description: "Lists the Claude or Codex accounts this chat (or another agent) can run on, which one it uses now, and how close each is to its usage limits.",
         input: z.object({ agentId: z.string().optional().describe("Another agent's id; defaults to this chat") }),
@@ -144,10 +166,10 @@ export class BatonRuntime {
         },
       }),
       defineAgentTool({
-        name: "baton_switch",
+        name: "accounts_switch",
         title: "Switch account",
         description: "Moves a Claude chat to another account, keeping its conversation. Moving this chat takes effect when the current turn ends. Codex chats can't move.",
-        input: z.object({ accountId: z.string().describe("An id from baton_accounts"), agentId: z.string().optional().describe("Another agent's id; defaults to this chat") }),
+        input: z.object({ accountId: z.string().describe("An id from accounts_list"), agentId: z.string().optional().describe("Another agent's id; defaults to this chat") }),
         execute: async ({ accountId, agentId }, { agent }) => {
           try {
             const result = await this.switchTo(paseo, agentId ?? agent.id, accountId);
@@ -183,7 +205,7 @@ export class BatonRuntime {
       if (outcome.kind === "failed") await this.afterFailure(paseo, agent, outcome.error.message);
       else if (outcome.kind === "completed") await this.afterSuccess(paseo, agent);
     } catch (error) {
-      this.deps.log(`Baton couldn't finish handling a turn: ${(error as Error).message}`);
+      this.deps.log(`Accounts plugin couldn't finish handling a turn: ${(error as Error).message}`);
     }
   }
 
@@ -206,6 +228,7 @@ export class BatonRuntime {
     const settings = await this.deps.settings();
     const handle = paseo.agents.ref(agent.id);
     const resets = new Date(limit.until).toISOString();
+    await this.freshen(snap.ranked, kind);
     if (kind === "codex") {
       const other = this.best(snap.ranked, "codex", { exclude: [from.id] });
       if (!other && settings.waitForReset) return this.waitForReset(paseo, agent.id, from, limit.until, failedAt);
@@ -217,7 +240,7 @@ export class BatonRuntime {
       return;
     }
     if (!this.guard.allow(agent.id, failedAt)) {
-      await this.note(handle, switchRow(from, null, "stuck", "This chat already switched accounts several times in the last 10 minutes, so Baton stopped to avoid a loop."));
+      await this.note(handle, switchRow(from, null, "stuck", "This chat already switched accounts several times in the last 10 minutes, so it stopped switching automatically to avoid a loop."));
       return;
     }
     const target = this.best(snap.ranked, "claude", { exclude: [from.id] });
@@ -232,7 +255,7 @@ export class BatonRuntime {
     if (!moved || !settings.continueAfterSwitch) return;
     // Only carry on if nobody has used the chat since the limit.
     if ((this.turnStarted.get(agent.id) ?? 0) > failedAt) return;
-    await handle.send(CONTINUE_PROMPT).catch((error) => this.deps.log(`Baton couldn't resume a chat: ${(error as Error).message}`));
+    await handle.send(CONTINUE_PROMPT).catch((error) => this.deps.log(`Accounts plugin couldn't resume a chat: ${(error as Error).message}`));
   }
 
   private async afterSuccess(paseo: PaseoApi, agent: { id: string; provider: string; metadata: Record<string, JsonValue> }) {
@@ -248,6 +271,7 @@ export class BatonRuntime {
     if (reading.usedPct === null || reading.usedPct < settings.switchBeforePercent) return;
     const now = this.deps.now();
     if (!this.guard.allow(agent.id, now)) return;
+    await this.freshen(snap.ranked, "claude");
     // Only move to an account with real room, so two busy accounts don't trade the chat back and forth.
     const target = this.best(snap.ranked, "claude", { exclude: [from.id], maxUsedPct: settings.switchBeforePercent - 10 });
     if (!target) return;
@@ -272,25 +296,27 @@ export class BatonRuntime {
         this.limited.delete(from.id);
         let moved = false;
         if (from.kind === "claude") {
+          await this.freshen(snap.ranked, "claude");
           const target = this.best(snap.ranked, "claude");
           if (target && target.id !== from.id && (await this.move(paseo, agentId, target, "limit", "A limit reset"))) moved = true;
         }
         if ((this.turnStarted.get(agentId) ?? 0) > failedAt) return;
         await handle.send(moved ? CONTINUE_PROMPT : RESUME_PROMPT);
-      })().catch((error) => this.deps.log(`Baton couldn't resume a chat after a reset: ${(error as Error).message}`));
+      })().catch((error) => this.deps.log(`Accounts plugin couldn't resume a chat after a reset: ${(error as Error).message}`));
     }, delay);
     (timer as { unref?: () => void }).unref?.();
     this.waits.set(agentId, timer);
-    await this.note(handle, switchRow(from, null, "stuck", `Every ${from.kind === "claude" ? "Claude" : "Codex"} account is at a limit. Baton will carry on at ${at.toISOString()}, unless you write to this chat first.`));
+    await this.note(handle, switchRow(from, null, "stuck", `Every ${from.kind === "claude" ? "Claude" : "Codex"} account is at a limit. This chat will carry on at ${at.toISOString()}, unless you write to this chat first.`));
   }
 
   /** Moves a Claude chat to another login and reopens it. Returns whether it moved. */
   async move(paseo: PaseoApi, agentId: string, target: Row, reason: "manual" | "limit" | "headroom", detail?: string): Promise<boolean> {
     return this.lock.run(agentId, async () => {
       const handle = paseo.agents.ref(agentId);
+      // Read the accounts first, so nothing slow sits between "the chat is idle" and the reopen.
+      const snap = await this.snapshot(paseo, false);
       const agent = await waitUntilIdle(handle);
       if (!agent) return false;
-      const snap = await this.snapshot(paseo);
       const from = currentAccount(agent, snap.rows, snap.providers);
       if (from?.id === target.id) return false;
       await handle.setMetadata({ [META_ACCOUNT]: target.id });
@@ -307,12 +333,12 @@ export class BatonRuntime {
     });
   }
 
-  /** Adds Baton's note to a chat. A note that can't be added is logged, never fatal. */
+  /** Adds the plugin's note to a chat. A note that can't be added is logged, never fatal. */
   private async note(handle: ReturnType<PaseoApi["agents"]["ref"]>, row: ReturnType<typeof switchRow>) {
     try {
       await handle.timeline.append(row);
     } catch (error) {
-      this.deps.log(`Baton couldn't add a note to a chat: ${(error as Error).message}`);
+      this.deps.log(`Accounts plugin couldn't add a note to a chat: ${(error as Error).message}`);
     }
   }
 
@@ -371,14 +397,24 @@ export class BatonRuntime {
     const target = snap.ranked.find((row) => row.id === accountId);
     if (!target || target.kind !== kind) throw new Error("That account can't run this chat");
     if (kind === "codex") throw new Error(`Codex chats stay on the account they started on, because Codex encrypts each conversation for its account. Start a new chat on ${target.label}.`);
-    if (target.state === "signed-out") throw new Error(`${target.label} isn't signed in. Sign in from Settings → Plugins → Baton first.`);
-    if (agent.status === "running" || agent.status === "initializing") {
+    if (target.state === "signed-out") throw new Error(`${target.label} isn't signed in. Sign in from Settings → Plugins → Claude & Codex Accounts first.`);
+    // Only a running turn defers the move; a chat that is still opening is waited for by move().
+    if (agent.status === "running") {
       this.pending.set(agentId, target.id);
       return { ok: true as const, label: target.label, deferred: true };
     }
     this.pending.delete(agentId);
-    await this.move(paseo, agentId, target, "manual");
-    return { ok: true as const, label: target.label, deferred: false };
+    if (await this.move(paseo, agentId, target, "manual")) return { ok: true as const, label: target.label, deferred: false };
+    // It didn't move: already there, gone, or a turn started and outlasted the wait.
+    await handle.refresh();
+    const now = handle.current();
+    if (!now || now.archivedAt) throw new Error("That chat no longer exists");
+    if (currentAccount(now, snap.rows, snap.providers)?.id === target.id) return { ok: true as const, label: target.label, deferred: false };
+    if (now.status === "running") {
+      this.pending.set(agentId, target.id);
+      return { ok: true as const, label: target.label, deferred: true };
+    }
+    throw new Error(`Couldn't move the chat to ${target.label}. Try again.`);
   }
 }
 

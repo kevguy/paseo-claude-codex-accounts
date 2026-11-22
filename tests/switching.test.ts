@@ -14,9 +14,9 @@ import {
   providerKind,
   sessionEnv,
   type Headroom,
-} from "../server/baton";
+} from "../server/switching";
 import { HeadroomCache, lookupEnv, summarize, type HeadroomDeps } from "../server/headroom";
-import { DEFAULT_SETTINGS, META_ACCOUNT, type BatonSettings } from "../shared/baton";
+import { DEFAULT_SETTINGS, META_ACCOUNT, type SwitchingOptions } from "../shared/switching";
 import type { AccountKind } from "../shared/accounts";
 
 const home = "/Users/x";
@@ -158,7 +158,7 @@ test("pickAccount returns null if every candidate is filtered", () => {
 
 const bestClaude = () => byId("claude-team");
 const best = (kind: AccountKind) => kind === "claude" ? bestClaude() : byId("codex-work");
-const settings = (overrides: Partial<BatonSettings> = {}): BatonSettings => ({ ...DEFAULT_SETTINGS, ...overrides });
+const settings = (overrides: Partial<SwitchingOptions> = {}): SwitchingOptions => ({ ...DEFAULT_SETTINGS, ...overrides });
 const chat = (provider: string, metadata?: Record<string, string>) => ({ provider, cwd: `${home}/work/app`, ...(metadata ? { metadata } : {}) });
 
 test("accountForNewChat chooses the best account for the auto selection", () => {

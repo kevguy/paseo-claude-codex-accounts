@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import type { UsageAccount, UsageReport, UsageScope } from "@getpaseo/plugin/server/usage";
 import { KIND_INFO, type AccountKind } from "../shared/accounts";
-import type { Headroom, Row } from "./baton";
+import type { Headroom, Row } from "./switching";
 import { discover as claudeDiscover, fetchUsage as claudeFetch } from "./vendor/paseo-usage/claude/server/usage.js";
 import { inputSchema as claudeInput } from "./vendor/paseo-usage/claude/shared/input.js";
 import { discover as codexDiscover, fetchUsage as codexFetch } from "./vendor/paseo-usage/codex/server/usage.js";
@@ -21,7 +21,7 @@ export interface HeadroomDeps {
   discover: Record<AccountKind, (scope: UsageScope) => Promise<UsageAccount[]>>;
   fetch: Record<AccountKind, (input: unknown) => Promise<UsageReport>>;
   now(): number;
-  /** Fixed readings by account id, used only by the README screenshot demo (PASEO_BATON_DEMO_USAGE). */
+  /** Fixed readings by account id, used only by the README screenshot demo (PASEO_ACCOUNTS_DEMO_USAGE). */
   demo?: Record<string, Headroom>;
 }
 
@@ -57,8 +57,23 @@ export class HeadroomCache {
     return this.readings.get(id)?.value;
   }
 
-  snapshot(): Map<string, Headroom> {
-    return new Map([...this.readings].map(([id, reading]) => [id, reading.value]));
+  /** Readings no older than `maxAgeMs`; older ones are left out, so they count as unknown. */
+  snapshot(maxAgeMs = Infinity): Map<string, Headroom> {
+    const now = this.deps.now();
+    return new Map([...this.readings].filter(([, reading]) => now - reading.at <= maxAgeMs).map(([id, reading]) => [id, reading.value]));
+  }
+
+  /** Refreshes readings older than `maxAgeMs`, waiting at most `waitMs` for slow usage endpoints. */
+  async refresh(rows: readonly Row[], maxAgeMs: number, waitMs = 2500): Promise<void> {
+    let stop = () => {};
+    await Promise.race([
+      Promise.allSettled(rows.map((row) => this.get(row, maxAgeMs))),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, waitMs);
+        stop = () => clearTimeout(timer);
+      }),
+    ]);
+    stop();
   }
 
   /** A reading no older than `maxAgeMs` (never fresher than the 90-second floor). */
@@ -104,9 +119,9 @@ export function defaultHeadroomDeps(env: Env, homedir: string): HeadroomDeps {
 
 /** The screenshot demo's made-up readings: {"claude-work": {"usedPct": 42, "summary": "5h 42% · wk 18%"}}. */
 function demoUsage(env: Env): Record<string, Headroom> | undefined {
-  if (!env.PASEO_BATON_DEMO_USAGE) return undefined;
+  if (!env.PASEO_ACCOUNTS_DEMO_USAGE) return undefined;
   try {
-    return JSON.parse(env.PASEO_BATON_DEMO_USAGE) as Record<string, Headroom>;
+    return JSON.parse(env.PASEO_ACCOUNTS_DEMO_USAGE) as Record<string, Headroom>;
   } catch {
     return undefined;
   }

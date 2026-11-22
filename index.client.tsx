@@ -2,7 +2,7 @@ import type { PluginClientContext, PluginWorkspacePanelProps } from "@getpaseo/p
 import { ScrollView } from "react-native";
 import { AccountsScreen } from "./client/accounts";
 import { AccountControl, SwitchRowView } from "./client/composer";
-import { SWITCH_ROW_KIND, switchRowSchema } from "./shared/baton";
+import { SWITCH_ROW_KIND, switchRowSchema } from "./shared/switching";
 
 const SETTINGS_ID = "accounts";
 const PANEL_ID = "accounts";
@@ -23,7 +23,7 @@ export default function contribute(client: PluginClientContext) {
     client.addWorkspacePanel({ id: PANEL_ID, title: "Accounts", icon: "Users", locations: ["workspace"], Component: AccountsPanel }),
     client.addCommandCenterItem({
       id: "accounts",
-      title: "Baton: Claude and Codex accounts",
+      title: "Claude & Codex Accounts",
       icon: "Users",
       keywords: ["account", "login", "sign in", "claude", "codex", "profile", "settings"],
       context: "global",

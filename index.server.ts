@@ -4,11 +4,11 @@ import { dirname, join } from "node:path";
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { accountsFromConfig, addAccount, clearStatusCache, listAccounts, removeAccount, signInArgv, updateAccount, type ConfigApi, type Host } from "./server/accounts";
 import { defaultHeadroomDeps } from "./server/headroom";
-import { BatonRuntime } from "./server/runtime";
+import { AccountsRuntime } from "./server/runtime";
 import { SignIns } from "./server/signin";
 import { defaultUsageHost, paseoConfigPath, usageSources } from "./server/usage";
 import { addRpc, listRpc, removeRpc, signInRpc, updateRpc, workspacesRpc } from "./shared/accounts";
-import { DEFAULT_SETTINGS, batonSettings, chooserRpc, signInCancelRpc, signInCodeRpc, signInStartRpc, signInViewRpc, switchRpc } from "./shared/baton";
+import { DEFAULT_SETTINGS, switchingSettings, chooserRpc, signInCancelRpc, signInCodeRpc, signInStartRpc, signInViewRpc, switchRpc } from "./shared/switching";
 
 type Paseo = PluginHandlerContext["paseo"];
 
@@ -46,8 +46,8 @@ export default function contribute(server: PluginServerContext) {
   for (const source of usageSources(defaultUsageHost())) server.registerUsageSource(source);
 
   // Switching: which account each chat runs on, moving it, and moving it automatically at a limit.
-  const settings = server.registerSettings(batonSettings);
-  const runtime = new BatonRuntime({
+  const settings = server.registerSettings(switchingSettings);
+  const runtime = new AccountsRuntime({
     host: (paseo) => host(paseo),
     settings: async () => {
       const state = await settings.read();
@@ -72,7 +72,7 @@ export default function contribute(server: PluginServerContext) {
     env: process.env,
     platform: process.platform,
     homedir: homedir(),
-    shimDir: join(dirname(paseoConfigPath(process.env, homedir())), "baton", "bin"),
+    shimDir: join(dirname(paseoConfigPath(process.env, homedir())), "paseo-claude-codex-accounts", "bin"),
     onSignedIn: () => clearStatusCache(),
   });
   server.handle(signInStartRpc, async ({ accountId, method, email }, { paseo }) => {

@@ -1,11 +1,11 @@
 {
-  "name": "@kevlai22/paseo-baton",
+  "name": "@kevlai22/paseo-claude-codex-accounts",
   "version": "1.0.0",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
-      "name": "@kevlai22/paseo-baton",
+      "name": "@kevlai22/paseo-claude-codex-accounts",
       "version": "1.0.0",
       "license": "MIT AND Apache-2.0",
       "devDependencies": {

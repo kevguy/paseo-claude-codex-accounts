@@ -3,7 +3,7 @@ import { SettingsAction, SettingsInput, copyText, useToast, type SettingsInputHa
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import type { Account } from "../shared/accounts";
-import { signInCancelRpc, signInCodeRpc, signInStartRpc, signInViewRpc, type SignInView } from "../shared/baton";
+import { signInCancelRpc, signInCodeRpc, signInStartRpc, signInViewRpc, type SignInView } from "../shared/switching";
 
 type Theme = PluginSurfaceProps["theme"];
 

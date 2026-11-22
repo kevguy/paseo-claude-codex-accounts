@@ -171,9 +171,9 @@ function AddAccount({ theme, platform, onAdded }: { theme: Theme; platform: stri
 export function AccountsScreen({ theme, host, navigation, workspaceId: panelWorkspace }: Pick<PluginSurfaceProps, "theme" | "host" | "navigation"> & { workspaceId?: string }) {
   const list = useRpc(listRpc), listWorkspaces = useRpc(workspacesRpc);
   const queryClient = useQueryClient();
-  const accountsKey = ["baton-accounts", host.id];
+  const accountsKey = ["accounts-list", host.id];
   const accounts = useQuery({ queryKey: accountsKey, queryFn: () => list({ refresh: false }) });
-  const workspaces = useQuery({ queryKey: ["baton-workspaces", host.id], queryFn: () => listWorkspaces({}), enabled: !panelWorkspace });
+  const workspaces = useQuery({ queryKey: ["accounts-workspaces", host.id], queryFn: () => listWorkspaces({}), enabled: !panelWorkspace });
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const chosenWorkspace = panelWorkspace ?? workspaceId ?? workspaces.data?.workspaces[0]?.id ?? null;
   const refresh = async () => queryClient.setQueryData(accountsKey, await list({ refresh: true }));

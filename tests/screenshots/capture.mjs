@@ -16,7 +16,7 @@ await page.waitForTimeout(3000);
 // First-run setup shows only when the host has no projects yet.
 const skip = page.getByText("Skip setup");
 if (await skip.isVisible()) await skip.click();
-await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-baton/accounts`);
+await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-claude-codex-accounts/accounts`);
 await page.getByText(/^Claude accounts/).waitFor({ timeout: 20000 });
 await page.waitForTimeout(1500);
 console.log("URL", page.url());
@@ -53,7 +53,7 @@ await page.getByText("Claude (Client B)", { exact: true }).waitFor({ state: "det
 console.log("REMOVE ok");
 
 // Switching settings.
-await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-baton/accounts`);
+await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-claude-codex-accounts/accounts`);
 await page.getByText(/^Claude accounts/).waitFor({ timeout: 20000 });
 await top(page.getByText("Switching", { exact: true }));
 await page.waitForTimeout(800);
@@ -65,7 +65,8 @@ console.log("SWITCHING ok");
 // The account control in a new chat's message box: open the demo workspace, start an agent, pick
 // a Claude model, then open the Account menu. The shot is clipped to the message box and menu.
 await page.goto("http://127.0.0.1:6792/");
-await page.getByText("main", { exact: true }).first().click({ timeout: 20000 });
+// The project, then its workspace row (an empty repository, so the row shows the folder name).
+await page.getByText("acme-web", { exact: true }).nth(1).click({ timeout: 20000 });
 await page.waitForTimeout(2000);
 await page.getByText("Agent", { exact: true }).first().click();
 await page.waitForTimeout(2000);

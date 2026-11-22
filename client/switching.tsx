@@ -3,7 +3,7 @@ import { SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsS
 import { useRef, useState } from "react";
 import { Text } from "react-native";
 import type { Account } from "../shared/accounts";
-import { batonSettings, type BatonSettings } from "../shared/baton";
+import { switchingSettings, type SwitchingOptions } from "../shared/switching";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -14,9 +14,9 @@ const EARLY = [
   { value: "80", label: "At 80% of a limit" },
 ];
 
-/** How Baton picks and moves accounts: automatic switching, new chats, and folder rules. */
+/** How the plugin picks and moves accounts: automatic switching, new chats, and folder rules. */
 export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme; accounts: readonly Account[]; platform: string }) {
-  const settings = useSettings(batonSettings);
+  const settings = useSettings(switchingSettings);
   const toast = useToast();
   const [pattern, setPattern] = useState("");
   const [ruleAccount, setRuleAccount] = useState<string>("");
@@ -33,7 +33,7 @@ export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme;
     );
   }
   const values = settings.values;
-  const save = async (change: Partial<BatonSettings>) => {
+  const save = async (change: Partial<SwitchingOptions>) => {
     const ok = await settings.save({ ...values, ...change }, settings.revision);
     if (!ok) toast.error(settings.saveError ?? "Couldn't save. Reload and try again.");
   };
@@ -83,7 +83,7 @@ export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme;
               { value: "most-headroom", label: "The account with the most room" },
             ]}
             disabled={settings.saving}
-            onValueChange={(newChats) => void save({ newChats: newChats as BatonSettings["newChats"] })}
+            onValueChange={(newChats) => void save({ newChats: newChats as SwitchingOptions["newChats"] })}
           />
         </SettingsCard>
         <Text style={muted}>
@@ -95,14 +95,14 @@ export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme;
         <SettingsCard>
           <SettingsSwitch
             label="Give agents account tools"
-            hint="Adds baton_accounts and baton_switch to new and reopened chats, so an agent can see every account's room and move chats."
+            hint="Adds accounts_list and accounts_switch to new and reopened chats, so an agent can see every account's room and move chats."
             value={values.agentTools}
             disabled={settings.saving}
             onValueChange={(agentTools) => void save({ agentTools })}
           />
         </SettingsCard>
         <Text selectable style={muted}>
-          Start or import a Claude chat on an account with a label: paseo run --label baton.account={accounts.find((account) => !account.isDefault && account.kind === "claude")?.id ?? "claude-work"} "…"
+          Start or import a Claude chat on an account with a label: paseo run --label account={accounts.find((account) => !account.isDefault && account.kind === "claude")?.id ?? "claude-work"} "…"
         </Text>
       </SettingsSection>
 

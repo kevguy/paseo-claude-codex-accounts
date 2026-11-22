@@ -99,3 +99,18 @@ test("removes inherited API keys from the child environment", async () => {
     assert.deepEqual(await session.done, { ok: true, email: "alex@example.com", plan: "plus" });
   } finally { await rm(parent, { recursive: true, force: true }); }
 });
+
+test("fails quickly when the app-server never answers", async () => {
+  const home = await makeHome();
+  const started = Date.now();
+  await assert.rejects(startCodexLogin(home, "device-code", deps("silent", { startupTimeoutMs: 300 })), /didn't respond/);
+  assert.ok(Date.now() - started < 5000);
+});
+
+test("won't pass unsafe arguments to a Windows .cmd shim", async () => {
+  const home = await makeHome();
+  let spawned = false;
+  const fakeSpawn = (() => { spawned = true; throw new Error("should not spawn"); }) as unknown as CodexLoginDeps["spawn"];
+  await assert.rejects(startCodexLogin(home, "device-code", { spawn: fakeSpawn, command: ["C:\\npm\\codex.cmd", "--profile", "a&calc"], platform: "win32", env: {} }), /safely/);
+  assert.equal(spawned, false);
+});

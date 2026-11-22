@@ -19,6 +19,8 @@ if (mode === "early-exit") {
 }
 
 input.on("line", (line) => {
+  // "silent": a server that starts but never answers.
+  if (mode === "silent") return;
   let request;
   try { request = JSON.parse(line); } catch { return; }
   if (request.method === "initialize") {

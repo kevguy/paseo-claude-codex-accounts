@@ -3,6 +3,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers";
+import { assertPlainShellArgs } from "./shell-args";
 
 export type CodexLoginMethod = "browser" | "device-code";
 export type CodexLoginStart = { method: "browser"; url: string } | { method: "device-code"; url: string; code: string };
@@ -19,6 +20,8 @@ export interface CodexLoginDeps {
   platform: NodeJS.Platform;
   env: Record<string, string | undefined>;
   timeoutMs?: number;
+  /** How long the app-server has to answer before sign-in starts. */
+  startupTimeoutMs?: number;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -37,6 +40,7 @@ function cleanError(value: unknown): string {
   if (/cancel/.test(lower)) return "Sign-in was canceled";
   if (/network|connection|offline/.test(lower)) return "Couldn't connect while signing in. Check your connection and try again.";
   if (/timed? out|timeout/.test(lower)) return "Sign-in timed out";
+  if (/didn't respond/.test(lower)) return "Codex app-server didn't respond. Check that Codex works in a terminal, then try again.";
   return "Sign-in failed. Please try again.";
 }
 
@@ -61,7 +65,8 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
   const command = prefix[0]!;
   const args = [...prefix.slice(1), "app-server"];
   const windowsShim = deps.platform === "win32" && /\.cmd$/i.test(command);
-  // With a shell, a path with spaces must be quoted; the only argument is fixed.
+  // cmd.exe parses the arguments it is handed, so they must be plain text; the path is quoted.
+  if (windowsShim) assertPlainShellArgs(args);
   const child = deps.spawn(windowsShim ? `"${command}"` : command, args, {
     env: env as NodeJS.ProcessEnv,
     stdio: ["pipe", "pipe", "pipe"],
@@ -181,13 +186,17 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
   const timeoutMs = deps.timeoutMs ?? 10 * 60 * 1000;
   const timeout = delay(() => finish({ ok: false, error: "Sign-in timed out" }), timeoutMs) as unknown as NodeJS.Timeout;
   void done.finally(() => clearTimeout(timeout));
+  // Paseo gives a plugin request 30 seconds, so an app-server that never answers fails well before that.
+  const startup = delay(() => finish({ ok: false, error: "Codex app-server didn't respond" }), deps.startupTimeoutMs ?? 20_000) as unknown as NodeJS.Timeout;
+  startup.unref?.();
 
   try {
-    await request("initialize", { clientInfo: { name: "paseo-baton", version: "1" } });
+    await request("initialize", { clientInfo: { name: "paseo-claude-codex-accounts", version: "1" } });
     send({ jsonrpc: "2.0", method: "initialized" });
     const login = record(await request("account/login/start", { type: method === "browser" ? "chatgpt" : "chatgptDeviceCode" }));
     if (!login || typeof login.loginId !== "string") throw new Error("Invalid sign-in response");
     loginId = login.loginId;
+    clearTimeout(startup);
     for (const params of earlyCompletions.splice(0)) completeNotification(params);
     let start: CodexLoginStart;
     if (method === "browser" && login.type === "chatgpt" && typeof login.authUrl === "string") {
@@ -201,7 +210,8 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
       done,
       async cancel() {
         if (terminal) return;
-        try { await request("account/login/cancel", { loginId: loginId! }); } catch { /* shutdown still proceeds */ }
+        // Don't wait long on a server that has stopped answering; shutdown proceeds either way.
+        try { await Promise.race([request("account/login/cancel", { loginId: loginId! }), new Promise((resolve) => delay(resolve, 2000))]); } catch { /* shutdown still proceeds */ }
         finish({ ok: false, error: "Sign-in was canceled" });
       },
     };

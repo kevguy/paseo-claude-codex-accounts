@@ -1,8 +1,8 @@
-# Baton
+# Claude & Codex Accounts
 
 **Move a Claude chat to another account mid-conversation, and keep working when one hits its
-limit.** Baton runs all your Claude and Codex accounts side by side in Paseo — work, personal, a
-client's — and hands a chat from one to the next without losing a word.
+limit.** Run all your Claude and Codex accounts side by side in Paseo — work, personal, a
+client's — and hand a chat from one to the next without losing a word.
 
 Works on macOS, Linux and Windows.
 
@@ -10,7 +10,7 @@ Works on macOS, Linux and Windows.
 
 ## What makes it different
 
-- **A chat keeps everything when it changes account.** Baton swaps only the login a chat uses.
+- **A chat keeps everything when it changes account.** The plugin swaps only the login a chat uses.
   The conversation, your settings, MCP servers, skills and hooks stay exactly as they were, so
   nothing is copied, linked or merged between folders.
 - **Failover that doesn't depend on wording.** A chat moves when its account hits a limit,
@@ -27,11 +27,11 @@ Works on macOS, Linux and Windows.
 - **Plain folders you can use from a terminal.** Accounts live in `~/.claude-<name>` and
   `~/.codex-<name>`, the same folders `CLAUDE_CONFIG_DIR=~/.claude-work claude` uses.
 - **Built for scripts and orchestrators:** start a chat on an account with
-  `paseo run --label baton.account=claude-work`, or let agents move chats with two tools.
+  `paseo run --label account=claude-work`, or let agents move chats with two tools.
 
 <p>
-  <img src="docs/screenshots/switching.png" alt="Baton's switching settings: automatic switching, switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
-  <img src="docs/screenshots/accounts.png" alt="Baton's accounts screen: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in" width="49%">
+  <img src="docs/screenshots/switching.png" alt="Switching settings: automatic switching, switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
+  <img src="docs/screenshots/accounts.png" alt="The accounts screen: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in" width="49%">
 </p>
 
 <sub>Screenshots use made-up accounts and usage. They come from Paseo's own web app driven by
@@ -42,10 +42,10 @@ Works on macOS, Linux and Windows.
 With Paseo 0.16.1 or later:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-baton@1.0.0
+paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.0
 ```
 
-Open it from **Settings → Plugins → Baton**, from a workspace's **+** menu (**Accounts**), or by
+Open it from **Settings → Plugins → Claude & Codex Accounts**, from a workspace's **+** menu (**Accounts**), or by
 searching "accounts" in the Command Center.
 
 ## Using it
@@ -71,22 +71,23 @@ moves only go to an account with real room.
 | **Claude**, with an account chosen in the message box or by a folder rule | your usual `~/.claude` settings, MCP servers and history, signed in as that account |
 | **Claude (Work)** | everything from `~/.claude-work`: its own settings, MCP servers and history |
 
-**Scripts and orchestrators.** `paseo run --label baton.account=claude-work "…"` (or
-`paseo import --label …`) starts a Claude chat on that account. Turn on **Give agents account
-tools** and agents get `baton_accounts` (every account's room, and which one a chat uses) and
-`baton_switch` (move this chat or another).
+**Scripts and orchestrators.** `paseo run --label account=claude-work "…"` (or
+`paseo import --label …`) starts a Claude chat on that account. For a Codex chat, pick the account's
+provider instead: `paseo run --provider codex-work "…"`. Turn on **Give agents account
+tools** and agents get `accounts_list` (every account's room, and which one a chat uses) and
+`accounts_switch` (move this chat or another).
 
 ## How switching works
 
 Claude Code reads its login from `CLAUDE_SECURESTORAGE_CONFIG_DIR` when it is set, and everything
-else (settings, transcripts) from `CLAUDE_CONFIG_DIR`. Baton records the account on the chat and,
+else (settings, transcripts) from `CLAUDE_CONFIG_DIR`. The plugin records the account on the chat and,
 whenever Paseo opens that chat's session, points `CLAUDE_SECURESTORAGE_CONFIG_DIR` at the account's
 folder (on macOS, the Keychain item Claude derives from that folder). Then it asks Paseo to reopen
 the chat. The conversation resumes from the same transcript, on the new login.
 
 Codex can't do this: it encrypts a conversation for the ChatGPT account that started it. So Codex
 chats pick their account when they start (by the message box, a folder rule or **Most headroom**),
-and when a Codex account hits its limit Baton says which account to start a new chat on.
+and when a Codex account hits its limit the plugin says which account to start a new chat on.
 
 Accounts themselves are ordinary Paseo [custom providers](https://paseo.sh/docs/custom-providers),
 each with its own folder:
@@ -110,19 +111,19 @@ Adding an account creates the folder and a provider entry such as:
 }
 ```
 
-Baton makes the change through Paseo's config API, so it takes effect at once.
+The plugin makes the change through Paseo's config API, so it takes effect at once.
 
 ## Privacy
 
 - Status comes from each account's own files: the identity Claude records in `.claude.json`, the
-  identity claims in Codex's `auth.json`, and whether a login exists. For status, Baton never reads
+  identity claims in Codex's `auth.json`, and whether a login exists. For status, the plugin never reads
   a Keychain secret; it only checks that the item exists.
 - Usage uses Paseo's own Claude and Codex usage code, unmodified and pointed at each extra account's
   folder ([server/vendor/paseo-usage](server/vendor/paseo-usage/README.md)). Like Paseo's built-in
   usage cards, it reads that account's login and sends it only to that provider's own usage API.
 - In-app sign-in runs the CLIs' own sign-in (`claude auth login`, `codex app-server`). The code you
-  paste goes straight to the CLI. Baton never shows, logs or stores a token.
-- If signing in again puts a *different* person's login in a folder, Baton warns you, because
+  paste goes straight to the CLI. The plugin never shows, logs or stores a token.
+- If signing in again puts a *different* person's login in a folder, the plugin warns you, because
   every chat using that account would then run as them.
 
 <p>
@@ -158,7 +159,7 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codex-work" | Out-N
 Codex refuses to start when `CODEX_HOME` doesn't exist, which is why the folder comes first.
 In PowerShell the variable stays set for the rest of that window; run
 `Remove-Item Env:CLAUDE_CONFIG_DIR` (or `Env:CODEX_HOME`) afterwards, or close the window. (The
-command Baton gives you to copy clears it for you.)
+command the plugin gives you to copy clears it for you.)
 
 Check which account each folder holds: `claude auth status` (Claude) or `codex login status`
 (Codex), with the same variable set.
@@ -215,11 +216,11 @@ Nothing is limited to one extra account:
 - **MCP servers that sign in with OAuth** keep those logins with the account, so after a switch
   a chat may need to sign in to such a server again on the new account.
 - **A switched chat's `/status`** shows the email cached in its own folder, not the account it now
-  runs on. Baton's **Account** control shows the real one. Likewise, Paseo's built-in usage card for
-  that chat shows its provider's account; Baton's cards show each account.
+  runs on. The plugin's **Account** control shows the real one. Likewise, Paseo's built-in usage card for
+  that chat shows its provider's account; the plugin's cards show each account.
 - **Waiting out a limit** lives in the plugin, so a Paseo restart forgets it (the note in the chat
   says when it would have carried on).
-- Baton manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
+- The plugin manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
   their own folder are listed and can be switched to, but only hidden or shown here.
 - Removing an account doesn't delete its folder, and the login stays in it. Delete the folder
   yourself if you want it gone; on macOS also delete its "Claude Code-credentials-…" Keychain item.

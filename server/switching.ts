@@ -1,12 +1,12 @@
 /// <reference types="node" />
 import { KINDS, type AccountKind } from "../shared/accounts";
-import { AUTO_ACCOUNT, META_ACCOUNT, META_AGENT, SWITCH_ROW_KIND, type AccountChoice, type BatonSettings, type SwitchRow } from "../shared/baton";
+import { AUTO_ACCOUNT, META_ACCOUNT, META_AGENT, SWITCH_ROW_KIND, type AccountChoice, type SwitchingOptions, type SwitchRow } from "../shared/switching";
 import { accountsFromConfig, type Host } from "./accounts";
 import { detectLimit } from "./limits";
 import { matchRule } from "./rules";
 
 /**
- * Baton's engine: which account a chat runs on, and moving it.
+ * The switching engine: which account a chat runs on, and moving it.
  *
  * A chat keeps its provider. For Claude, the account is only the login: Claude Code reads its login
  * from CLAUDE_SECURESTORAGE_CONFIG_DIR when that is set (the Keychain item hashed from that folder on
@@ -53,7 +53,7 @@ export function metaString(metadata: Readonly<Record<string, JsonValue>> | null 
   return typeof value === "string" && value ? value : undefined;
 }
 
-/** The account a chat runs on: the one Baton chose for it, else its provider's own. */
+/** The account a chat runs on: the one the plugin chose for it, else its provider's own. */
 export function currentAccount(agent: { provider: string; metadata?: Readonly<Record<string, JsonValue>> | null }, rows: readonly Row[], providers: Providers): Row | null {
   const chosen = metaString(agent.metadata, META_ACCOUNT);
   const kind = providerKind(agent.provider, providers);
@@ -102,7 +102,7 @@ export function pickAccount(candidates: readonly (Row & { state: AccountChoice["
 }
 
 /** Account for a new chat, from (in order) an explicit choice, a folder rule, then the new-chat setting. */
-export function accountForNewChat(input: { provider: string; cwd: string; metadata?: Record<string, JsonValue> }, rows: readonly Row[], providers: Providers, settings: BatonSettings, best: (kind: AccountKind) => Row | null, ctx: { homedir: string; platform: NodeJS.Platform }): { row: Row; why: SwitchRow["reason"] | "explicit" } | null {
+export function accountForNewChat(input: { provider: string; cwd: string; metadata?: Record<string, JsonValue> }, rows: readonly Row[], providers: Providers, settings: SwitchingOptions, best: (kind: AccountKind) => Row | null, ctx: { homedir: string; platform: NodeJS.Platform }): { row: Row; why: SwitchRow["reason"] | "explicit" } | null {
   const kind = providerKind(input.provider, providers);
   if (!kind) return null;
   const chosen = metaString(input.metadata, META_ACCOUNT);
@@ -160,7 +160,7 @@ export const CONTINUE_PROMPT = "You were interrupted by a usage limit. That's be
 export function switchRow(from: Row | null, to: Row | null, reason: SwitchRow["reason"], detail?: string): { type: "plugin"; id: string; kind: string; version: number; data: SwitchRow } {
   return {
     type: "plugin",
-    id: `baton-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `account-switch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     kind: SWITCH_ROW_KIND,
     version: 1,
     data: { from: from?.label ?? null, to: to?.label ?? null, reason, ...(detail ? { detail } : {}) },

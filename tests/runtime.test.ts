@@ -4,10 +4,10 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ConfigApi, Host } from "../server/accounts";
 import { accountsFromConfig } from "../server/accounts";
-import { CONTINUE_PROMPT, RESUME_PROMPT } from "../server/baton";
-import { BatonRuntime, DEFAULT_SETTINGS, type RuntimeDeps } from "../server/runtime";
+import { CONTINUE_PROMPT, RESUME_PROMPT } from "../server/switching";
+import { AccountsRuntime, DEFAULT_SETTINGS, type RuntimeDeps } from "../server/runtime";
 import type { HeadroomDeps } from "../server/headroom";
-import { AUTO_ACCOUNT, LABEL_ACCOUNT, META_ACCOUNT, META_AGENT, type BatonSettings } from "../shared/baton";
+import { AUTO_ACCOUNT, LABEL_ACCOUNT, META_ACCOUNT, META_AGENT, type SwitchingOptions } from "../shared/switching";
 import type { AccountKind } from "../shared/accounts";
 import type { UsageReport } from "@getpaseo/plugin/server/usage";
 
@@ -35,8 +35,10 @@ function fakeConfig(initial: Record<string, Record<string, unknown>>) {
   const calls: unknown[] = [];
   let getGate: Promise<void> | null = null;
   let gateOnce = false;
+  let getError: Error | null = null;
   const api: ConfigApi = {
     async get() {
+      if (getError) { const error = getError; getError = null; throw error; }
       if (getGate && !gateOnce) { gateOnce = true; await getGate; }
       return { config: { providers: structuredClone(providers) } };
     },
@@ -47,11 +49,11 @@ function fakeConfig(initial: Record<string, Record<string, unknown>>) {
       return {};
     },
   };
-  return { api, providers, calls, pauseNextGet(gate: Promise<void>) { getGate = gate; gateOnce = false; } };
+  return { api, providers, calls, pauseNextGet(gate: Promise<void>) { getGate = gate; gateOnce = false; }, failNextGet(error: Error) { getError = error; } };
 }
 
 interface HarnessOptions {
-  settings?: Partial<BatonSettings>;
+  settings?: Partial<SwitchingOptions>;
   providers?: (root: string) => Record<string, Record<string, unknown>>;
   signedOut?: string[];
   usage?: Record<string, number | null>;
@@ -123,7 +125,7 @@ async function createHarness(options: HarnessOptions = {}) {
     timeline: { async append(item: unknown) { calls.timeline.push(item); } },
   };
   const paseo = { agents: { ref(id: string) { assert.equal(id, agent.id); return handle; } } } as any;
-  let settings: BatonSettings = { ...DEFAULT_SETTINGS, ...options.settings };
+  let settings: SwitchingOptions = { ...DEFAULT_SETTINGS, ...options.settings };
   const logs: string[] = [];
   const runtimeDeps: RuntimeDeps = {
     host() {
@@ -135,11 +137,11 @@ async function createHarness(options: HarnessOptions = {}) {
     now: () => nowRef.value,
     log: (message) => logs.push(message),
   };
-  const runtime = new BatonRuntime(runtimeDeps);
+  const runtime = new AccountsRuntime(runtimeDeps);
   return {
     root, runtime, paseo, agent, handle, calls, logs, config, rows: configRows,
     nowRef, used, statusById,
-    settings(value: Partial<BatonSettings>) { settings = { ...settings, ...value }; },
+    settings(value: Partial<SwitchingOptions>) { settings = { ...settings, ...value }; },
     failReload(message = "refresh failed") { reloadError = new Error(message); },
     async close() { runtime.dispose(); await rm(root, { recursive: true, force: true }); },
   };
@@ -150,9 +152,9 @@ async function withHarness(run: (h: Awaited<ReturnType<typeof createHarness>>) =
   try { await run(h); } finally { await h.close(); }
 }
 
-type CreatePayload = Parameters<BatonRuntime["onCreate"]>[0];
-type OpenPayload = Parameters<BatonRuntime["onOpen"]>[0];
-type TurnEndPayload = Parameters<BatonRuntime["onTurnEnd"]>[0];
+type CreatePayload = Parameters<AccountsRuntime["onCreate"]>[0];
+type OpenPayload = Parameters<AccountsRuntime["onOpen"]>[0];
+type TurnEndPayload = Parameters<AccountsRuntime["onTurnEnd"]>[0];
 function createPayload(provider = "claude", metadata: Record<string, unknown> = {}, cwd = "/work/app"): CreatePayload {
   return { request: { config: { provider, cwd }, metadata } } as unknown as CreatePayload;
 }
@@ -228,12 +230,24 @@ test("onOpen ignores account labels on resume", async () => withHarness(async (h
 test("onOpen ignores a label naming an account of the wrong kind", async () => withHarness(async (h) => {
   const result = await h.runtime.onOpen(openPayload({ provider: "claude", reason: "import", labels: { [LABEL_ACCOUNT]: "codex-work" } }), h.paseo);
   assert.equal(result, undefined);
-  assert.ok(h.logs.some((line) => line.includes("doesn't name an account")));
+  assert.ok(h.logs.some((line) => line.includes("doesn't name a Claude account")));
 }));
-test("onOpen adds the two Baton tools when enabled for interactive chats", async () => withHarness(async (h) => {
+test("onOpen doesn't record a Codex label, since a Codex chat can't change login", async () => withHarness(async (h) => {
+  const result = await h.runtime.onOpen(openPayload({ provider: "codex", reason: "create", labels: { [LABEL_ACCOUNT]: "codex-work" } }), h.paseo);
+  assert.equal(result, undefined);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(h.calls.metadata.some((patch) => META_ACCOUNT in patch), false);
+  assert.ok(h.logs.some((line) => line.includes("--provider codex-work")));
+}));
+test("onOpen lets the chat open when the accounts can't be read", async () => withHarness(async (h) => {
+  h.config.failNextGet(new Error("config unavailable"));
+  const result = await h.runtime.onOpen(openPayload({ reason: "resume", metadata: { [META_AGENT]: "agent-1" } }), h.paseo);
+  assert.equal(result, undefined);
+}));
+test("onOpen adds the two account tools when enabled for interactive chats", async () => withHarness(async (h) => {
   h.settings({ agentTools: true });
   const result = await h.runtime.onOpen(openPayload({ purpose: "interactive", metadata: { [META_AGENT]: "agent-1" } }), h.paseo);
-  assert.deepEqual(result?.tools?.map((tool: any) => tool.name), ["baton_accounts", "baton_switch"]);
+  assert.deepEqual(result?.tools?.map((tool: any) => tool.name), ["accounts_list", "accounts_switch"]);
 }));
 
 test("onTurnEnd fails over after a Claude limit and records, reloads, and resumes", async () => withHarness(async (h) => {
@@ -257,6 +271,8 @@ test("onTurnEnd does not resume after the user starts another turn during failov
 }));
 test("onTurnEnd uses a 100 percent usage reading when the error text is unfamiliar", async () => withHarness(async (h) => {
   h.used.claude = 100;
+  h.used["claude-work"] = 30;
+  h.used["claude-team"] = 50;
   await h.runtime.onTurnEnd(turnPayload(h, failure("Request was rejected by the provider")), h.paseo);
   assert.ok(h.agent.metadata[META_ACCOUNT] !== undefined);
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "limit");
@@ -335,6 +351,32 @@ test("switchTo defers a running chat and applies the move after its turn ends", 
   await h.runtime.onTurnEnd(turnPayload(h, completed), h.paseo);
   assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "manual");
+}));
+test("switchTo moves a chat that is still opening right away instead of waiting for a turn", async () => withHarness(async (h) => {
+  h.agent.status = "initializing";
+  setTimeout(() => { h.agent.status = "idle"; }, 20);
+  const result = await h.runtime.switchTo(h.paseo, h.agent.id, "claude-work");
+  assert.equal(result.deferred, false);
+  assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
+  assert.equal(h.calls.reload, 1);
+}));
+test("switchTo doesn't report a move that didn't happen", async () => withHarness(async (h) => {
+  h.agent.archivedAt = "2026-01-01T00:00:00Z";
+  await assert.rejects(h.runtime.switchTo(h.paseo, h.agent.id, "claude-work"), /no longer exists/);
+  assert.equal(h.calls.reload, 0);
+}));
+test("failover ignores an old 100 percent reading once the account's limit has reset", async () => withHarness(async (h) => {
+  // An hour ago, Work and Team both read 100%.
+  h.used["claude-work"] = 100;
+  h.used["claude-team"] = 100;
+  await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-work")!);
+  await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-team")!);
+  // Work's window has since reset.
+  h.used["claude-work"] = 5;
+  h.nowRef.value += 60 * 60_000;
+  await h.runtime.onTurnEnd(turnPayload(h, failure("You've hit your limit · resets 3pm (UTC)")), h.paseo);
+  assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
+  assert.equal(h.calls.timeline.at(-1)?.data.reason, "limit");
 }));
 test("switchTo rejects Codex account switches", async () => withHarness(async (h) => {
   h.agent.provider = "codex";

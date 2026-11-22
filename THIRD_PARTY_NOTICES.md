@@ -4,7 +4,7 @@
 
 `server/limits.ts` adapts the usage-limit message patterns from
 [ZeroSub](https://github.com/kapybara-org/zerosub) (`server/limits.ts`), under the MIT License.
-Baton's in-app sign-in (`server/claude-login.ts`, `server/codex-login.ts`) is written separately but
+This plugin's in-app sign-in (`server/claude-login.ts`, `server/codex-login.ts`) is written separately but
 follows the approach ZeroSub showed: capturing Claude's browser link and taking its code back, and
 Codex's app-server sign-in.
 

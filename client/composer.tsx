@@ -2,7 +2,7 @@ import { useComposer, useRpc, type PluginComposerItemProps, type PluginTimelineI
 import { Select, useToast } from "@getpaseo/plugin/client/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Text, View } from "react-native";
-import { AUTO_ACCOUNT, META_ACCOUNT, META_AGENT, chooserRpc, switchRpc, type AccountChoice, type SwitchRow } from "../shared/baton";
+import { AUTO_ACCOUNT, META_ACCOUNT, META_AGENT, chooserRpc, switchRpc, type AccountChoice, type SwitchRow } from "../shared/switching";
 
 const AS_CONFIGURED = "__configured";
 
@@ -39,7 +39,7 @@ export function AccountControl({ host }: PluginComposerItemProps) {
   // Recorded on the agent by the server when its session opens.
   const agentId = isAgent ? text(composer.agent.metadata[META_AGENT]) : undefined;
   const provider = composer.agent.provider ?? undefined;
-  const queryKey = ["baton-chooser", host.id, agentId ?? null, provider ?? null];
+  const queryKey = ["accounts-chooser", host.id, agentId ?? null, provider ?? null];
   const query = useQuery({
     queryKey,
     queryFn: () => chooser({ ...(agentId ? { agentId } : {}), ...(provider ? { provider } : {}) }),
@@ -62,8 +62,12 @@ export function AccountControl({ host }: PluginComposerItemProps) {
         options={options}
         onValueChange={async ({ value }) => {
           if (value === current) return;
-          const result = await switchTo({ agentId, accountId: value });
-          toast.show(result.deferred ? `Moves to ${result.label} when this turn ends` : `Now on ${result.label}`);
+          try {
+            const result = await switchTo({ agentId, accountId: value });
+            toast.show(result.deferred ? `Moves to ${result.label} when this turn ends` : `Now on ${result.label}`);
+          } catch (error) {
+            toast.error((error as Error).message);
+          }
           await queryClient.invalidateQueries({ queryKey });
         }}
       />
@@ -102,7 +106,7 @@ const REASON: Record<SwitchRow["reason"], string> = {
   stuck: "Couldn't switch account",
 };
 
-/** The note Baton adds to a chat when it moves it, or can't. */
+/** The note the plugin adds to a chat when it moves it, or can't. */
 export function SwitchRowView({ item, theme }: PluginTimelineItemProps<SwitchRow>) {
   const row = item.data;
   const muted = theme.colors.foregroundMuted;

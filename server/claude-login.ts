@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { assertPlainShellArgs } from "./shell-args";
 
 export interface ClaudeLoginStart {
   url: string;
@@ -51,17 +52,19 @@ export async function startClaudeLogin(configDir: string | null, deps: ClaudeLog
   // cmd.exe expansion and quoting differ across Node versions; stdout remains the portable fallback.
   const useShim = deps.platform !== "win32";
   if (useShim) {
-    await writeFile(shimFile, "#!/bin/sh\nprintf '%s' \"$1\" > \"$BATON_BROWSER_OUT\"\n", { mode: 0o700 });
+    await writeFile(shimFile, "#!/bin/sh\nprintf '%s' \"$1\" > \"$PASEO_ACCOUNTS_BROWSER_OUT\"\n", { mode: 0o700 });
     await chmod(shimFile, 0o700);
     env.BROWSER = shimFile;
-    env.BATON_BROWSER_OUT = outputFile;
+    env.PASEO_ACCOUNTS_BROWSER_OUT = outputFile;
   } else {
     delete env.BROWSER;
-    delete env.BATON_BROWSER_OUT;
+    delete env.PASEO_ACCOUNTS_BROWSER_OUT;
   }
   const command = deps.command[0]!;
-  // With a shell, a path with spaces must be quoted; the arguments are fixed or validated.
-  const child = deps.spawn(deps.platform === "win32" && /\.cmd$/i.test(command) ? `"${command}"` : command, args, { env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], ...(deps.platform === "win32" && /\.cmd$/i.test(command) ? { shell: true } : {}) });
+  const windowsShim = deps.platform === "win32" && /\.cmd$/i.test(command);
+  // cmd.exe parses the arguments it is handed, so they must be plain text; the path is quoted.
+  if (windowsShim) assertPlainShellArgs(args);
+  const child = deps.spawn(windowsShim ? `"${command}"` : command, args, { env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], ...(windowsShim ? { shell: true } : {}) });
   child.stdout?.setEncoding("utf8");
   child.stderr?.setEncoding("utf8");
 
