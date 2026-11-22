@@ -23,10 +23,11 @@ export function statusLine(status: AccountStatus): string {
   return [STATE_LABEL[status.state], status.email, status.organization, status.plan].filter(Boolean).join(" · ");
 }
 
-function AccountCard({ account, platform, workspaceId, theme, onChanged, onOpenWorkspace }: {
+function AccountCard({ account, platform, workspaceId, inPanel, theme, onChanged, onOpenWorkspace }: {
   account: Account;
   platform: string;
   workspaceId: string | null;
+  inPanel: boolean;
   theme: Theme;
   onChanged(): void;
   onOpenWorkspace?(workspaceId: string): void;
@@ -91,7 +92,7 @@ function AccountCard({ account, platform, workspaceId, theme, onChanged, onOpenW
         <>
         <SettingsAction
           label={account.status.state === "signed-in" ? "Sign in again" : "Sign in"}
-          hint={workspaceId ? "Opens a terminal in the selected workspace" : "Choose a workspace below, or copy the command"}
+          hint={workspaceId ? (inPanel ? "Opens a terminal in this workspace" : "Opens a terminal in the selected workspace") : "Choose a workspace below, or copy the command"}
           actionLabel="Open terminal"
           disabled={busy || !workspaceId}
           onPress={() => workspaceId && run(async () => {
@@ -160,14 +161,18 @@ function AddAccount({ theme, platform, onAdded }: { theme: Theme; platform: stri
   );
 }
 
-export function AccountsScreen({ theme, host, navigation }: PluginSurfaceProps) {
+/**
+ * The Accounts screen, used in Settings and as a workspace panel. In a panel, `workspaceId` is the
+ * panel's workspace, so sign-in terminals open there and the workspace picker is hidden.
+ */
+export function AccountsScreen({ theme, host, navigation, workspaceId: panelWorkspace }: Pick<PluginSurfaceProps, "theme" | "host" | "navigation"> & { workspaceId?: string }) {
   const list = useRpc(listRpc), listWorkspaces = useRpc(workspacesRpc);
   const queryClient = useQueryClient();
   const accountsKey = ["paseo-accounts", host.id];
   const accounts = useQuery({ queryKey: accountsKey, queryFn: () => list({ refresh: false }) });
-  const workspaces = useQuery({ queryKey: ["paseo-accounts-workspaces", host.id], queryFn: () => listWorkspaces({}) });
+  const workspaces = useQuery({ queryKey: ["paseo-accounts-workspaces", host.id], queryFn: () => listWorkspaces({}), enabled: !panelWorkspace });
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const chosenWorkspace = workspaceId ?? workspaces.data?.workspaces[0]?.id ?? null;
+  const chosenWorkspace = panelWorkspace ?? workspaceId ?? workspaces.data?.workspaces[0]?.id ?? null;
   const refresh = async () => queryClient.setQueryData(accountsKey, await list({ refresh: true }));
   const muted = { color: theme.colors.foregroundMuted, fontSize: 13 };
 
@@ -194,6 +199,7 @@ export function AccountsScreen({ theme, host, navigation }: PluginSurfaceProps) 
                 account={account}
                 platform={platform}
                 workspaceId={chosenWorkspace}
+                inPanel={Boolean(panelWorkspace)}
                 theme={theme}
                 onChanged={() => void refresh()}
                 {...(navigation ? { onOpenWorkspace: (id: string) => navigation.openWorkspace({ workspaceId: id, serverId: host.id }) } : {})}
@@ -203,9 +209,9 @@ export function AccountsScreen({ theme, host, navigation }: PluginSurfaceProps) 
         );
       })}
       <AddAccount theme={theme} platform={platform} onAdded={() => void refresh()} />
-      <SettingsSection title="Sign-in terminal">
+      <SettingsSection title={panelWorkspace ? "Sign-in status" : "Sign-in terminal"}>
         <SettingsCard>
-          {workspaces.data?.workspaces.length ? (
+          {panelWorkspace ? null : workspaces.data?.workspaces.length ? (
             <SettingsSelect
               label="Open sign-in terminals in"
               value={chosenWorkspace ?? ""}

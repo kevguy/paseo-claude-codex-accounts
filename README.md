@@ -13,6 +13,8 @@ Works on macOS, Linux and Windows.
   <img src="docs/screenshots/accounts-add.png" alt="Adding an account named Client B, which will use the folder ~/.claude-client-b" width="49%">
 </p>
 
+<img src="docs/screenshots/accounts-panel.png" alt="Accounts open as a tab in a workspace, from the workspace's + menu" width="100%">
+
 <sub>Screenshots use made-up accounts. They come from Paseo's own web app driven by
 `tests/screenshots`.</sub>
 
@@ -41,7 +43,9 @@ With Paseo 0.16.1 or later:
 paseo plugin install npm:@kevlai22/paseo-accounts@0.1.0
 ```
 
-Open **Settings → Accounts**, or search "accounts" in the Command Center.
+Open it from **Settings → Plugins → Accounts**, as a tab from a workspace's **+** menu, or by
+searching "accounts" in the Command Center. In a workspace tab, sign-in terminals open in that
+workspace.
 
 ## How it works
 

@@ -51,4 +51,16 @@ await card.getByText("Remove…", { exact: true }).click();
 await card.getByText("Remove", { exact: true }).click();
 await page.getByText("Claude (Client B)", { exact: true }).waitFor({ state: "detached", timeout: 10000 });
 console.log("REMOVE ok");
+
+// The same screen as a workspace tab: open the demo workspace, then + → Accounts.
+await page.goto("http://127.0.0.1:6792/");
+await page.getByText("main", { exact: true }).first().click({ timeout: 20000 });
+await page.waitForTimeout(2000);
+await page.getByRole("button", { name: "New tab" }).first().click();
+await page.waitForTimeout(800);
+await page.getByText("Accounts", { exact: true }).last().click();
+await page.getByText(/^Claude accounts/).waitFor({ timeout: 15000 });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${outDir}/accounts-panel.png` });
+console.log("PANEL ok");
 await browser.close();
