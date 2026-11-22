@@ -9,6 +9,10 @@
     "type": "git",
     "url": "git+https://github.com/kevguy/paseo-accounts.git"
   },
+  "homepage": "https://github.com/kevguy/paseo-accounts#readme",
+  "bugs": {
+    "url": "https://github.com/kevguy/paseo-accounts/issues"
+  },
   "keywords": [
     "paseo",
     "paseo-plugin",

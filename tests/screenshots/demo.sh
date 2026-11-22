@@ -15,7 +15,15 @@ stop() {
     [ -f "$RUN/$name.pid" ] || continue
     pid=$(cat "$RUN/$name.pid")
     case "$(ps -o command= -p "$pid" 2>/dev/null || true)" in
-      *"$D/paseo-home"*|*serve-app.mjs*6792*) kill "$pid" ;;
+      *"$D/paseo-home"*|*serve-app.mjs*6792*)
+        kill "$pid"
+        # The daemon shuts its plugins down first; wait for it rather than racing a restart.
+        tries=0
+        while kill -0 "$pid" 2>/dev/null; do
+          tries=$((tries + 1))
+          if [ $tries -gt 40 ]; then echo "$name (pid $pid) didn't stop; try again" >&2; exit 1; fi
+          sleep 0.5
+        done ;;
     esac
     rm -f "$RUN/$name.pid"
   done
@@ -23,7 +31,6 @@ stop() {
 stop
 [ "${1:-}" = "--stop" ] && exit 0
 ASAR="$1"
-sleep 1
 for port in 6791 6792; do
   if lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; then
     echo "Port $port is in use by something this script didn't start; stop it first." >&2

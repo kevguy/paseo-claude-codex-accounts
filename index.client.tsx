@@ -1,19 +1,20 @@
-import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
-import { SidebarRow } from "@getpaseo/plugin/client/ui";
+import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { AccountsScreen } from "./client/accounts";
 
-const SCREEN_ID = "accounts-home";
+const SETTINGS_ID = "accounts";
 
-function AccountsItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
-  return <SidebarRow icon="Users" active={currentScreen?.screenId === SCREEN_ID} onPress={() => openScreen({ screenId: SCREEN_ID })} />;
-}
-
+/** Accounts lives in Settings; the Command Center jumps straight to it. */
 export default function contribute(client: PluginClientContext) {
   const cleanups = [
-    client.addSettingsScreen({ id: "accounts", title: "Accounts", icon: "Users", Component: AccountsScreen }),
-    client.addScreen({ id: SCREEN_ID, title: "Accounts", Component: AccountsScreen }),
-    client.addSidebarHeaderItem({ id: "accounts", title: "Accounts", Component: AccountsItem }),
-    client.addCommandCenterItem({ id: "accounts", title: "Manage Claude and Codex accounts", icon: "Users", keywords: ["account", "login", "sign in", "claude", "codex", "profile"], context: "global", onSelect: ({ openScreen }) => openScreen({ screenId: SCREEN_ID }) }),
+    client.addSettingsScreen({ id: SETTINGS_ID, title: "Accounts", icon: "Users", Component: AccountsScreen }),
+    client.addCommandCenterItem({
+      id: "accounts",
+      title: "Manage Claude and Codex accounts",
+      icon: "Users",
+      keywords: ["account", "login", "sign in", "claude", "codex", "profile", "settings"],
+      context: "global",
+      onSelect: ({ openSettings }) => openSettings(SETTINGS_ID),
+    }),
   ];
   return () => cleanups.forEach((cleanup) => cleanup());
 }

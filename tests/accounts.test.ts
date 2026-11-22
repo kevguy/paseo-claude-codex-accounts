@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import type { UsageScope } from "@getpaseo/plugin/server/usage";
 import test from "node:test";
 import { accountsFromConfig, addAccount, clearStatusCache, listAccounts, mapLimit, removeAccount, signInArgv, updateAccount, type ConfigApi, type Host } from "../server/accounts";
+import { discoverAccounts, paseoConfigPath } from "../server/usage";
 import { claudeKeychainService, claudeStatus, codexStatus, jwtClaims } from "../server/status";
 import { displayPath, powershellArgv, powershellQuote, signInCommands, signInTerminalArgv, slugify } from "../shared/accounts";
 
@@ -323,4 +325,43 @@ test("sign-in refuses a folder that isn't a full path", async () => {
   const config = fakeConfig({ "claude-odd": { extends: "claude", env: { CLAUDE_CONFIG_DIR: "~/.claude-odd" } } });
   await assert.rejects(signInArgv(makeHost(home, config.api), "claude-odd"), /isn't a full path/);
   await rm(home, { recursive: true, force: true });
+});
+
+test("usage lists every extra account, looked up in its own folder, and nothing for sessions", async () => {
+  const providers = {
+    claude: { label: "Claude" },
+    "claude-work": { extends: "claude", label: "Claude (Work)", env: { CLAUDE_CONFIG_DIR: "/home/alex/.claude-work" } },
+    "claude-research": { extends: "claude", label: "Claude (Research)", env: { CLAUDE_CONFIG_DIR: "/home/alex/.claude-research" }, enabled: false },
+    "codex-work": { extends: "codex", label: "Codex (Work)", env: { CODEX_HOME: "/home/alex/.codex-work" } },
+    zai: { extends: "claude", env: { ANTHROPIC_BASE_URL: "https://example.invalid" } },
+  };
+  const seen: unknown[] = [];
+  const host = {
+    env: { HOME: "/home/alex", USER: "alex", CLAUDE_CONFIG_DIR: "/should/not/leak", PATH: "/usr/bin" },
+    homedir: "/home/alex",
+    platform: "linux" as const,
+    providers: async () => providers,
+    discover: {
+      claude: async (scope: UsageScope) => {
+        seen.push(scope);
+        const dir = scope.kind === "session" ? scope.env.CLAUDE_CONFIG_DIR : "";
+        return dir.endsWith("research") ? [] : [{ key: "uuid.org", label: "alex@northwind.example", input: { route: { store: "claude", path: `${dir}/.credentials.json` } } }];
+      },
+      codex: async () => [{ key: "acct", input: { route: { store: "codex", path: "/home/alex/.codex-work/auth.json" } } }],
+    },
+  };
+  assert.deepEqual(await discoverAccounts("claude", { kind: "session", provider: "claude", env: {} }, host), []);
+  const claude = await discoverAccounts("claude", { kind: "global" }, host);
+  assert.deepEqual(claude.map((a) => a.label), ["Claude (Work) · alex@northwind.example"]);
+  assert.deepEqual(seen, [
+    { kind: "session", provider: "claude", env: { HOME: "/home/alex", USER: "alex", CLAUDE_CONFIG_DIR: "/home/alex/.claude-research" } },
+    { kind: "session", provider: "claude", env: { HOME: "/home/alex", USER: "alex", CLAUDE_CONFIG_DIR: "/home/alex/.claude-work" } },
+  ]);
+  assert.deepEqual((await discoverAccounts("codex", { kind: "global" }, host)).map((a) => a.label), ["Codex (Work)"]);
+});
+
+test("usage finds Paseo's config where the daemon keeps it", () => {
+  assert.equal(paseoConfigPath({}, "/home/alex"), join("/home/alex", ".paseo", "config.json"));
+  assert.equal(paseoConfigPath({ PASEO_HOME: "~/custom" }, "/home/alex"), join("/home/alex", "custom", "config.json"));
+  assert.equal(paseoConfigPath({ PASEO_HOME: "/srv/paseo" }, "/home/alex"), join(resolve("/srv/paseo"), "config.json"));
 });

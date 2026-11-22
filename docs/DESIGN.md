@@ -88,12 +88,30 @@ Status is read from files, so no binary needs resolving on any OS:
 3. Status refreshes when the user presses Refresh. The plugin can't see when
    the sign-in terminal finishes.
 
-## Usage (0.2)
+## Usage
 
-Register a usage source that, in global scope, discovers every non-default
-enabled account. Fetching ports the built-in Claude and Codex usage logic
-(Paseo builtin plugins, Apache-2.0, with attribution). Per-session usage
-already works natively, so 0.1 does not depend on this.
+Paseo's built-in usage sources list only the default login in global scope
+(the Usage page), and a running agent's own login in its session. Accounts
+registers two more sources, `accounts-claude` ("Claude accounts") and
+`accounts-codex` ("Codex accounts"):
+- `discover(global)` reads `agents.providers` from
+  `$PASEO_HOME/config.json` (the daemon passes `PASEO_HOME` to plugin
+  processes; default `~/.paseo`), because a usage source gets no Paseo API.
+  For each non-default account it calls Paseo's own `discover` with a session
+  scope whose env holds only `HOME`, `USERPROFILE`, `USER` and that account's
+  folder variable. A session scope looks at exactly that folder, so the
+  default login and other tools' stores (Pi, OMP, OpenCode) aren't listed
+  twice. Labels become `Claude (Work) · <email>`.
+- `discover(session)` returns nothing: the built-in source already reports a
+  running agent's own login.
+- `fetch` is Paseo's own `fetchUsage`.
+- The code is vendored unmodified from Paseo v0.16.2 under `server/vendor`
+  (Paseo only loads plugin modules from `client/`, `server/` and `shared/`),
+  with Paseo's Apache-2.0 license. The files match the upstream tag byte for
+  byte.
+- Verified 2026-11-22: on an isolated daemon with fictional accounts it lists
+  each signed-in extra account and skips signed-out ones; on the live daemon
+  the real work account reports its plan and details.
 
 ## Scale (N accounts)
 

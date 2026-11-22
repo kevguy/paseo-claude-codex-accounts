@@ -2,6 +2,7 @@
 import { homedir } from "node:os";
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { addAccount, listAccounts, removeAccount, signInArgv, updateAccount, type ConfigApi, type Host } from "./server/accounts";
+import { defaultUsageHost, usageSources } from "./server/usage";
 import { addRpc, listRpc, removeRpc, signInRpc, updateRpc, workspacesRpc } from "./shared/accounts";
 
 type Paseo = PluginHandlerContext["paseo"];
@@ -36,5 +37,7 @@ export default function contribute(server: PluginServerContext) {
     const terminal = await paseo.terminals.create({ workspaceId, name: `Sign in: ${row.label}`, command, args });
     return { terminalId: terminal.id };
   });
+  // Usage for every extra account on Paseo's Usage page.
+  for (const source of usageSources(defaultUsageHost())) server.registerUsageSource(source);
   return () => {};
 }

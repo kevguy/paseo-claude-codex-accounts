@@ -22,6 +22,9 @@ Works on macOS, Linux and Windows.
   model picker as "Claude (Work)" with all of that provider's models and modes.
 - **Sign in.** Open a terminal that runs the right sign-in command for that account, or copy the
   command and run it yourself.
+- **See every account's usage.** Paseo's Usage page gets a "Claude accounts" and a "Codex
+  accounts" card for each extra account, with the same limits and plan Paseo shows for your
+  default one.
 - **See who's signed in.** Each account shows whether it's signed in, with its email,
   organisation and plan.
 - **Keep the picker tidy.** Hide an account you don't use often; its login stays, ready for later.
@@ -38,7 +41,7 @@ With Paseo 0.16.1 or later:
 paseo plugin install npm:@kevlai22/paseo-accounts@0.1.0
 ```
 
-Open **Accounts** in the sidebar or in Settings, or search "accounts" in the Command Center.
+Open **Settings → Accounts**, or search "accounts" in the Command Center.
 
 ## How it works
 
@@ -70,8 +73,14 @@ restart. On macOS, Claude stores each folder's login under its own Keychain item
 never overwrite each other.
 
 Status comes from each account's own files: the identity Claude records in `.claude.json`, the
-identity claims in Codex's `auth.json`, and whether a login exists. Accounts never shows, logs or
-sends a token, and never reads a Keychain secret; it only checks that the item exists.
+identity claims in Codex's `auth.json`, and whether a login exists. For status, Accounts never
+reads a Keychain secret; it only checks that the item exists.
+
+Usage uses Paseo's own Claude and Codex usage code, unmodified and pointed at each extra
+account's folder ([server/vendor/paseo-usage](server/vendor/paseo-usage/README.md)). Like Paseo's
+built-in usage cards, it reads that account's login (from its credentials file, or on macOS its
+Keychain item) and sends it only to that provider's own usage API. Accounts never shows, logs or
+stores a token.
 
 ## Setting an account up by hand
 
@@ -156,8 +165,9 @@ Nothing is limited to one extra account:
 - Sign-in happens in the CLI's own browser flow. Accounts opens the terminal for it but can't
   sign in for you.
 - "Open terminal" needs a workspace on the host. Without one, copy the sign-in command.
-- Paseo's usage meter already follows the account of a running agent. A single overview of every
-  account's usage is planned.
+- A running agent's usage shows on Paseo's built-in card for that session; the "Claude accounts"
+  and "Codex accounts" cards on the Usage page list every extra account, hidden ones included.
+  Turn any card off on the Usage page itself.
 - Accounts manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
   their own folder are listed, but can only be hidden or shown here.
 - Removing an account doesn't delete its folder, and the login stays in it. Delete the folder
@@ -180,4 +190,5 @@ use a made-up home folder and their own Paseo home, clear `CLAUDE_CONFIG_DIR` an
 and only stop processes they started. The comments at the top of each file give the arguments. The design and verified facts
 behind it are in [docs/DESIGN.md](docs/DESIGN.md).
 
-MIT licensed.
+MIT licensed. The vendored usage code in `server/vendor/paseo-usage` is Paseo's, under the
+Apache License 2.0.
