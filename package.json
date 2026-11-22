@@ -5,8 +5,17 @@
   "description": "Run several Claude and Codex accounts side by side in Paseo.",
   "license": "MIT",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/kevguy/paseo-accounts.git" },
-  "keywords": ["paseo", "paseo-plugin", "claude", "codex", "accounts"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevguy/paseo-accounts.git"
+  },
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "claude",
+    "codex",
+    "accounts"
+  ],
   "files": [
     "paseo-plugin.json",
     "index.client.tsx",
@@ -17,7 +26,6 @@
     "docs/",
     "LICENSE",
     "README.md",
-    "THIRD_PARTY_NOTICES.md",
     "npm-shrinkwrap.json"
   ],
   "scripts": {
