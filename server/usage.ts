@@ -21,16 +21,40 @@ import { accountsFromConfig, mapLimit, type Host } from "./accounts";
 
 type Env = Record<string, string | undefined>;
 
-/** Where the daemon keeps config.json. The daemon passes PASEO_HOME to plugin processes. */
+/**
+ * Where the daemon keeps config.json, resolved the way the daemon does (resolvePaseoHome in
+ * Paseo's server/paseo-home.ts). The daemon passes PASEO_HOME to plugin processes.
+ */
 export function paseoConfigPath(env: Env, home: string): string {
-  const raw = env.PASEO_HOME?.trim() || "~/.paseo";
-  const dir = raw === "~" ? home : raw.startsWith("~/") || raw.startsWith("~\\") ? join(home, raw.slice(2)) : resolve(raw);
-  return join(dir, "config.json");
+  const raw = env.PASEO_HOME ?? "~/.paseo";
+  const expanded = raw === "~" ? home : raw.startsWith("~/") ? join(home, raw.slice(2)) : raw;
+  return join(resolve(expanded), "config.json");
 }
 
+/** The provider entries. Errors never quote the file: provider env entries can hold API keys. */
 export async function readProviders(env: Env, home: string): Promise<Record<string, unknown> | undefined> {
-  const config = JSON.parse(await readFile(paseoConfigPath(env, home), "utf8")) as { agents?: { providers?: Record<string, unknown> } };
+  let raw: string;
+  try {
+    raw = await readFile(paseoConfigPath(env, home), "utf8");
+  } catch (error) {
+    throw new Error(`Paseo's config.json can't be read (${(error as NodeJS.ErrnoException).code ?? "unknown error"})`);
+  }
+  let config: { agents?: { providers?: Record<string, unknown> } };
+  try {
+    config = JSON.parse(raw);
+  } catch {
+    throw new Error("Paseo's config.json isn't valid JSON");
+  }
   return config.agents?.providers;
+}
+
+/**
+ * Usage keys are per folder. Paseo merges accounts with the same key into one card, and the
+ * vendored code keys a Codex login by its ChatGPT workspace, so two seats in one workspace
+ * would otherwise share a card. Keys allow [A-Za-z0-9._-]{1,128}; provider ids are [a-z0-9-].
+ */
+export function folderKey(accountId: string, key: string): string {
+  return `${accountId}.${key}`.slice(0, 128);
 }
 
 interface UsageHost extends Pick<Host, "homedir" | "platform"> {
@@ -57,7 +81,7 @@ export async function discoverAccounts(kind: AccountKind, scope: UsageScope, hos
       // A session scope looks at exactly one folder, so the default login and other
       // tools' stores (Pi, OMP, OpenCode) aren't listed again here.
       const accounts = await host.discover[kind]({ kind: "session", provider: kind, env: accountEnv(kind, row.home, host) });
-      return accounts.map((account) => ({ ...account, label: account.label ? `${row.label} · ${account.label}` : row.label }));
+      return accounts.map((account) => ({ ...account, key: folderKey(row.id, account.key), label: account.label ? `${row.label} · ${account.label}` : row.label }));
     } catch {
       return [];
     }

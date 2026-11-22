@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "description": "Run several Claude and Codex accounts side by side in Paseo.",
-  "license": "MIT",
+  "license": "MIT AND Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",

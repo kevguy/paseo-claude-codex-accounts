@@ -72,6 +72,12 @@ Status is read from files, so no binary needs resolving on any OS:
 - Results are cached for 60 s, with at most 3 accounts read at once.
   Hidden accounts are read too, so the list shows who they belong to.
 
+## Where it shows
+
+A Settings screen (Settings → Plugins → Accounts), a workspace panel (a
+workspace's + menu; sign-in terminals open in that workspace), and a Command
+Center item that opens the Settings screen. No sidebar item.
+
 ## Sign-in
 
 1. "Sign in" opens a Paseo terminal in the current workspace:
@@ -101,7 +107,14 @@ registers two more sources, `accounts-claude` ("Claude accounts") and
   scope whose env holds only `HOME`, `USERPROFILE`, `USER` and that account's
   folder variable. A session scope looks at exactly that folder, so the
   default login and other tools' stores (Pi, OMP, OpenCode) aren't listed
-  twice. Labels become `Claude (Work) · <email>`.
+  twice. Labels become `Claude (Work) · <email>`. Keys are prefixed with the
+  provider id, so each folder gets its own card: the vendored Codex key is the
+  ChatGPT workspace, which two seats of one Team workspace would share.
+- `config.json` is found the way the daemon finds it (`PASEO_HOME`, else
+  `~/.paseo`, with `~` and `~/` expanded). Read and parse errors never quote the
+  file, whose provider env entries can hold API keys.
+- Paseo doesn't merge cards across sources, so while an agent runs on an extra
+  account it can show on both the built-in card and "Claude accounts".
 - `discover(session)` returns nothing: the built-in source already reports a
   running agent's own login.
 - `fetch` is Paseo's own `fetchUsage`.

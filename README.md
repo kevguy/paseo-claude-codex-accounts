@@ -171,7 +171,9 @@ Nothing is limited to one extra account:
 - "Open terminal" needs a workspace on the host. Without one, copy the sign-in command.
 - A running agent's usage shows on Paseo's built-in card for that session; the "Claude accounts"
   and "Codex accounts" cards on the Usage page list every extra account, hidden ones included.
-  Turn any card off on the Usage page itself.
+  Turn any card off on the Usage page itself. While an agent runs on an extra account, Paseo may
+  show that account on both its built-in card and the "Claude accounts" card; Paseo doesn't merge
+  cards from different sources. Each folder gets its own card, even when two hold the same login.
 - Accounts manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
   their own folder are listed, but can only be hidden or shown here.
 - Removing an account doesn't delete its folder, and the login stays in it. Delete the folder

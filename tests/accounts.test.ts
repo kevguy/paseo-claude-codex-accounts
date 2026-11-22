@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import type { UsageScope } from "@getpaseo/plugin/server/usage";
 import test from "node:test";
 import { accountsFromConfig, addAccount, clearStatusCache, listAccounts, mapLimit, removeAccount, signInArgv, updateAccount, type ConfigApi, type Host } from "../server/accounts";
-import { discoverAccounts, paseoConfigPath } from "../server/usage";
+import { discoverAccounts, folderKey, paseoConfigPath, readProviders } from "../server/usage";
 import { claudeKeychainService, claudeStatus, codexStatus, jwtClaims } from "../server/status";
 import { displayPath, powershellArgv, powershellQuote, signInCommands, signInTerminalArgv, slugify } from "../shared/accounts";
 
@@ -353,6 +353,7 @@ test("usage lists every extra account, looked up in its own folder, and nothing 
   assert.deepEqual(await discoverAccounts("claude", { kind: "session", provider: "claude", env: {} }, host), []);
   const claude = await discoverAccounts("claude", { kind: "global" }, host);
   assert.deepEqual(claude.map((a) => a.label), ["Claude (Work) · alex@northwind.example"]);
+  assert.deepEqual(claude.map((a) => a.key), ["claude-work.uuid.org"]);
   assert.deepEqual(seen, [
     { kind: "session", provider: "claude", env: { HOME: "/home/alex", USER: "alex", CLAUDE_CONFIG_DIR: "/home/alex/.claude-research" } },
     { kind: "session", provider: "claude", env: { HOME: "/home/alex", USER: "alex", CLAUDE_CONFIG_DIR: "/home/alex/.claude-work" } },
@@ -360,8 +361,37 @@ test("usage lists every extra account, looked up in its own folder, and nothing 
   assert.deepEqual((await discoverAccounts("codex", { kind: "global" }, host)).map((a) => a.label), ["Codex (Work)"]);
 });
 
+test("usage keys stay per folder, so two seats of one workspace keep their own cards", async () => {
+  const providers = {
+    "codex-work": { extends: "codex", label: "Codex (Work)", env: { CODEX_HOME: "/home/alex/.codex-work" } },
+    "codex-client": { extends: "codex", label: "Codex (Client)", env: { CODEX_HOME: "/home/alex/.codex-client" } },
+  };
+  const host = {
+    env: { HOME: "/home/alex" },
+    homedir: "/home/alex",
+    platform: "linux" as const,
+    providers: async () => providers,
+    discover: {
+      claude: async () => [],
+      codex: async () => [{ key: "same-workspace", input: { route: { store: "codex", path: "x" } } }],
+    },
+  };
+  const keys = (await discoverAccounts("codex", { kind: "global" }, host)).map((a) => a.key);
+  assert.deepEqual(keys.sort(), ["codex-client.same-workspace", "codex-work.same-workspace"]);
+  assert.equal(folderKey("claude-x", "k".repeat(200)).length, 128);
+});
+
+test("a broken config.json is reported without quoting it", async () => {
+  const home = await fakeHome();
+  await mkdir(join(home, ".paseo"), { recursive: true });
+  await writeFile(join(home, ".paseo", "config.json"), '{"agents": sk-ant-api03-SECRET');
+  await assert.rejects(readProviders({}, home), (error: Error) => /isn't valid JSON/.test(error.message) && !/SECRET|sk-/.test(error.message));
+  await rm(home, { recursive: true, force: true });
+});
+
 test("usage finds Paseo's config where the daemon keeps it", () => {
   assert.equal(paseoConfigPath({}, "/home/alex"), join("/home/alex", ".paseo", "config.json"));
   assert.equal(paseoConfigPath({ PASEO_HOME: "~/custom" }, "/home/alex"), join("/home/alex", "custom", "config.json"));
   assert.equal(paseoConfigPath({ PASEO_HOME: "/srv/paseo" }, "/home/alex"), join(resolve("/srv/paseo"), "config.json"));
+  assert.equal(paseoConfigPath({ PASEO_HOME: "~" }, "/home/alex"), join(resolve("/home/alex"), "config.json"));
 });
