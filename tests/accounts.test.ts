@@ -111,7 +111,7 @@ test("accounts come from the defaults plus every entry with its own folder, for 
   assert.equal(rows.filter((r) => r.kind === "codex").length, 2);
   assert.ok(!rows.some((r) => r.id === "zai" || r.id === "gemini"));
   assert.equal(rows[0]!.id, "claude");
-  assert.equal(rows[0]!.home, "/h/.claude");
+  assert.equal(rows[0]!.home, join("/h", ".claude"));
   assert.deepEqual(rows.slice(1, 4).map((r) => r.label), ["Claude (acct 01)", "Claude (acct 02)", "Claude (acct 03)"]);
   assert.equal(rows.find((r) => r.id === "codex")!.enabled, false);
   assert.equal(rows.find((r) => r.id === "legacy-work")!.managed, false);
@@ -394,8 +394,8 @@ test("a broken config.json is reported without quoting it", async () => {
 });
 
 test("usage finds Paseo's config where the daemon keeps it", () => {
-  assert.equal(paseoConfigPath({}, "/home/alex"), join("/home/alex", ".paseo", "config.json"));
-  assert.equal(paseoConfigPath({ PASEO_HOME: "~/custom" }, "/home/alex"), join("/home/alex", "custom", "config.json"));
+  assert.equal(paseoConfigPath({}, "/home/alex"), join(resolve("/home/alex", ".paseo"), "config.json"));
+  assert.equal(paseoConfigPath({ PASEO_HOME: "~/custom" }, "/home/alex"), join(resolve("/home/alex", "custom"), "config.json"));
   assert.equal(paseoConfigPath({ PASEO_HOME: "/srv/paseo" }, "/home/alex"), join(resolve("/srv/paseo"), "config.json"));
   assert.equal(paseoConfigPath({ PASEO_HOME: "~" }, "/home/alex"), join(resolve("/home/alex"), "config.json"));
 });
