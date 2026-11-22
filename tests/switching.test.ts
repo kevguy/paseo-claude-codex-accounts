@@ -16,7 +16,7 @@ import {
   type Headroom,
 } from "../server/switching";
 import { HeadroomCache, lookupEnv, summarize, type HeadroomDeps } from "../server/headroom";
-import { DEFAULT_SETTINGS, META_ACCOUNT, type SwitchingOptions } from "../shared/switching";
+import { DEFAULT_SETTINGS, META_ACCOUNT, migrateSwitching, switchingSettings, type SwitchingOptions } from "../shared/switching";
 import type { AccountKind } from "../shared/accounts";
 
 const home = "/Users/x";
@@ -377,4 +377,14 @@ test("HeadroomCache exposes cached readings through snapshot", async () => {
   const cache = new HeadroomCache(cacheDeps());
   await cache.get(byId("claude"));
   assert.deepEqual(cache.snapshot().get("claude"), { usedPct: 42, summary: "5h 42%" });
+});
+
+test("settings from before version 2 have automatic switching turned off once", () => {
+  assert.equal(switchingSettings.version, 2);
+  const old = { rules: [{ pattern: "~/work/**", accountId: "claude-work" }], autoSwitch: true, switchBeforePercent: 90 };
+  assert.deepEqual(migrateSwitching(old, 1), { ...old, autoSwitch: false });
+  const parsed = switchingSettings.schema.parse(migrateSwitching(old, 1));
+  assert.equal(parsed.autoSwitch, false);
+  assert.equal(parsed.rules.length, 1);
+  assert.deepEqual(migrateSwitching({ autoSwitch: true }, 2), { autoSwitch: true });
 });

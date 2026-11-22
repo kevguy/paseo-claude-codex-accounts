@@ -1,7 +1,7 @@
 # Claude & Codex Accounts
 
-**Move a Claude chat to another account mid-conversation, and keep working when one hits its
-limit.** Run all your Claude and Codex accounts side by side in Paseo — work, personal, a
+**Move a Claude chat to another account mid-conversation, and, if you turn it on, keep working
+when one hits its limit.** Run all your Claude and Codex accounts side by side in Paseo — work, personal, a
 client's — and hand a chat from one to the next without losing a word.
 
 Works on macOS, Linux and Windows.
@@ -13,11 +13,13 @@ Works on macOS, Linux and Windows.
 - **A chat keeps everything when it changes account.** The plugin swaps only the login a chat uses.
   The conversation, your settings, MCP servers, skills and hooks stay exactly as they were, so
   nothing is copied, linked or merged between folders.
-- **Failover that doesn't depend on wording.** A chat moves when its account hits a limit,
+- **Opt-in failover that doesn't depend on wording.** With automatic switching on, a chat moves
+  when its account hits a limit,
   spotted either from the CLI's message *or* from the account's real usage reading, so a
   reworded message doesn't quietly turn failover off. It can also move early, at 80–95%.
-- **It can carry on by itself.** After a move it tells the chat to continue, but only if you
-  haven't written to it since. When every account is at its limit, it can wait for the first reset.
+- **It can carry on by itself.** With automatic switching on, after a move it tells the chat to
+  continue, but only if you haven't written to it since. When every account is at its limit, it can
+  wait for the first reset.
 - **Every account's usage, before you start.** Each extra account gets its own card on Paseo's
   Usage page, and the message box shows how much room each one has.
 - **Sign in from anywhere**, phone included: Claude's page gives you a code to paste back, and
@@ -42,10 +44,10 @@ most, and all of them are here:
 | Asked for | Here |
 | --- | --- |
 | Switch account without losing the conversation | Any Claude chat, from the message box (mid-turn, it moves when the turn ends) |
-| Keep working when an account hits its limit | Claude chats move and carry on by themselves; Codex chats say which account to use |
+| Keep working when an account hits its limit | With automatic switching on, Claude chats move and carry on by themselves; Codex chats say which account to use |
 | Don't rely on the error wording | A limit is spotted from the message *or* the real usage reading |
 | Move before the limit, not after | Optional early switch at 80, 90 or 95% |
-| What to do when every account is out | Optional wait for the first reset, then carry on |
+| What to do when every account is out | Optional wait for the first reset, then carry on (Claude chats need automatic switching on) |
 | Usage for every account, not just the default | A Usage-page card per account, and room shown in the account menu |
 | Tell accounts apart | Email and plan wherever the provider reports them, and the organisation for Claude |
 | Pick the account per chat, or let it choose | An account, "Most headroom", or folder rules |
@@ -59,7 +61,7 @@ What it can't do yet is under [Limits](#limits): most importantly, Codex chats c
 account, because Codex encrypts each conversation for the account that started it.
 
 <p>
-  <img src="docs/screenshots/switching.png" alt="Switching settings: automatic switching, switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
+  <img src="docs/screenshots/switching.png" alt="Switching settings: automatic switching (off by default, with a note on what turning it on means), switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
   <img src="docs/screenshots/accounts.png" alt="The accounts screen: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in" width="49%">
 </p>
 
@@ -71,7 +73,7 @@ account, because Codex encrypts each conversation for the account that started i
 With Paseo 0.16.1 or later:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.1
+paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.2
 ```
 
 Open it from **Settings → Plugins → Claude & Codex Accounts**, from a workspace's **+** menu (**Accounts**), or by
@@ -87,8 +89,11 @@ choose an account, **Most headroom**, or leave it **as configured** (folder rule
 picker's account). In a running Claude chat, choosing another account moves the chat there; if a
 turn is running, it moves when the turn ends.
 
-**Let it switch for you.** With **Switch Claude chats automatically** on (the default), a chat
-that hits a usage limit moves to the signed-in account with the most room and carries on. Each
+**Let it switch for you.** Turn on **Switch Claude chats automatically** (it's off by default) and a
+chat that hits a usage limit moves to the signed-in account with the most room and carries on. That
+can carry a work or client conversation on under a personal account or another organisation, including
+chats a folder rule placed on a particular account, so turn it on only if that's fine for your accounts. Updating from 1.0.1 turns it
+off once, because 1.0.1 saved it as on even if you never chose it; turn it back on if you want it. Each
 move adds a note to the chat saying where it went and why. To stop two busy accounts trading a
 chat back and forth, a chat moves automatically at most four times in ten minutes, and early
 moves only go to an account with real room.

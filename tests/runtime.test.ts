@@ -126,7 +126,8 @@ async function createHarness(options: HarnessOptions = {}) {
     timeline: { async append(item: unknown) { calls.timeline.push(item); } },
   };
   const paseo = { agents: { ref(id: string) { assert.equal(id, agent.id); return handle; } } } as any;
-  let settings: SwitchingOptions = { ...DEFAULT_SETTINGS, ...options.settings };
+  // Most tests exercise switching, so the harness turns it on; the real default is off (see the test below).
+  let settings: SwitchingOptions = { ...DEFAULT_SETTINGS, autoSwitch: true, ...options.settings };
   const logs: string[] = [];
   const runtimeDeps: RuntimeDeps = {
     host() {
@@ -259,6 +260,15 @@ test("onTurnEnd fails over after a Claude limit and records, reloads, and resume
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "limit");
   assert.equal(h.calls.send.at(-1), CONTINUE_PROMPT);
 }));
+test("automatic switching is off by default, so a limit leaves the chat on its account", async () => withHarness(async (h) => {
+  assert.equal(DEFAULT_SETTINGS.autoSwitch, false);
+  await h.runtime.onTurnEnd(turnPayload(h, failure("You've hit your limit · resets 3pm (UTC)")), h.paseo);
+  assert.equal(h.agent.metadata[META_ACCOUNT], undefined);
+  assert.equal(h.calls.reload, 0);
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(h.calls.timeline.at(-1)?.data.reason, "stuck");
+  assert.match(h.calls.timeline.at(-1)?.data.detail ?? "", /Automatic switching is off/);
+}, { settings: { autoSwitch: DEFAULT_SETTINGS.autoSwitch } }));
 test("onTurnEnd does not resume after the user starts another turn during failover", async () => withHarness(async (h) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -337,6 +347,15 @@ test("a successful turn above the threshold moves for headroom without sending",
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "headroom");
   assert.equal(h.calls.send.length, 0);
 }));
+test("with the default settings a turn above the early-switch threshold does not move", async () => withHarness(async (h) => {
+  h.agent.metadata[META_ACCOUNT] = "claude";
+  h.used.claude = 99; h.used["claude-work"] = 20; h.used["claude-team"] = 10;
+  await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-work")!);
+  await h.runtime.headroom.get(h.rows.find((row) => row.id === "claude-team")!);
+  await h.runtime.onTurnEnd(turnPayload(h, completed), h.paseo);
+  assert.equal(h.agent.metadata[META_ACCOUNT], "claude");
+  assert.equal(h.calls.reload, 0);
+}, { settings: { autoSwitch: DEFAULT_SETTINGS.autoSwitch } }));
 test("a successful turn below the threshold does not move", async () => withHarness(async (h) => {
   h.agent.metadata[META_ACCOUNT] = "claude";
   h.used.claude = 40;

@@ -1,8 +1,8 @@
 {
   "name": "@kevlai22/paseo-claude-codex-accounts",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
-  "description": "Claude & Codex Accounts for Paseo: move a chat to another Claude account mid-conversation, and keep working when one hits its limit.",
+  "description": "Claude & Codex Accounts for Paseo: move a chat to another Claude account mid-conversation, or let it move when an account hits its limit (opt-in).",
   "license": "MIT AND Apache-2.0",
   "type": "module",
   "repository": {

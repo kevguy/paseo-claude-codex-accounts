@@ -1,4 +1,4 @@
-Claude & Codex Accounts lets you use several Claude and Codex accounts in Paseo, such as work, personal and a client's. You pick the account for each chat from the message box. A running Claude chat can move to another account and keep its conversation, and a chat that hits a usage limit can move to an account that still has room.
+Claude & Codex Accounts lets you use several Claude and Codex accounts in Paseo, such as work, personal and a client's. You pick the account for each chat from the message box. A running Claude chat can move to another account and keep its conversation, and, if you turn on automatic switching, a chat that hits a usage limit can move to an account that still has room.
 
 Moving a chat swaps only its login. The conversation, settings, MCP servers, skills and hooks stay the same. Claude Code reads its login from `CLAUDE_SECURESTORAGE_CONFIG_DIR`, so the plugin points that at the chosen account and reopens the chat from the same transcript. Codex encrypts each conversation for the account that started it, so a Codex chat can't change account. New Codex chats pick an account when they start.
 
@@ -10,10 +10,10 @@ Add accounts from the plugin's Accounts screen (Settings, then Plugins, a worksp
 
 - **Per chat:** in a new chat, choose an account, "Most headroom" (the signed-in account furthest from its limits), or leave it as configured. In a running Claude chat, choosing another account moves it. If a turn is running, the move happens when the turn ends.
 - **Folder rules:** map folders to accounts with `*` and `**` wildcards. The most specific rule wins.
-- **Automatic switching** (on by default): a Claude chat that hits a limit moves to the signed-in account with the most room. A limit is spotted from the CLI's message or from the account's usage reading. Each move adds a note to the chat. A chat moves automatically at most four times in ten minutes.
-- **Early switching** (on by default): between turns, a chat moves once its account passes 95% of a limit, to an account at least 10 points lower. You can set 80 or 90%, or turn it off.
-- **Carrying on** (on by default): after a move caused by a limit, it tells the chat to continue, unless you have written to it since.
-- **Waiting out a limit** (optional): when every account is at its limit, it waits for the first reset.
+- **Automatic switching** (off by default): when you turn it on, a Claude chat that hits a limit moves to the signed-in Claude account with the most room and keeps its conversation. This can carry a work or client conversation on under a personal account or another organisation, including chats a folder rule placed on a particular account. A limit is spotted from the CLI's message or from the account's usage reading. Each move adds a note to the chat. A chat moves automatically at most four times in ten minutes. With it off, a chat that hits a limit gets a note to choose another account.
+- **Early switching** (with automatic switching on): between turns, a chat moves once its account passes 95% of a limit, to an account at least 10 points lower. You can set 80 or 90%, or only switch at the limit.
+- **Carrying on** (with automatic switching on): after a move caused by a limit, it tells the chat to continue, unless you have written to it since.
+- **Waiting out a limit** (optional; Claude chats also need automatic switching on): when every account is at its limit, it waits for the first reset.
 - **Codex:** when a Codex account hits its limit, the plugin says which account to start a new chat on.
 - **Scripts and agents:** `paseo run --label account=claude-work` starts a Claude chat on that account. An optional setting gives agents `accounts_list` and `accounts_switch` tools.
 

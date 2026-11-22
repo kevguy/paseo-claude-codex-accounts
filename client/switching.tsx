@@ -48,7 +48,7 @@ export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme;
         <SettingsCard>
           <SettingsSwitch
             label="Switch Claude chats automatically"
-            hint="When an account hits a usage limit, the chat moves to the signed-in account with the most room, and keeps its conversation."
+            hint="When an account hits a usage limit, the chat moves to the signed-in Claude account with the most room and keeps its conversation. That can carry a work or client conversation on under a personal account or another organisation, including chats a folder rule placed. Off by default."
             value={values.autoSwitch}
             disabled={settings.saving}
             onValueChange={(autoSwitch) => void save({ autoSwitch })}
@@ -70,7 +70,7 @@ export function SwitchingSettings({ theme, accounts, platform }: { theme: Theme;
           />
           <SettingsSwitch
             label="Wait out a limit when every account is at one"
-            hint="Carry on by itself when the first limit resets, unless you've written to the chat since. Forgotten if Paseo restarts."
+            hint="Carry on by itself when the first limit resets, unless you've written to the chat since. Forgotten if Paseo restarts. Claude chats also need automatic switching on."
             value={values.waitForReset}
             disabled={settings.saving}
             onValueChange={(waitForReset) => void save({ waitForReset })}
