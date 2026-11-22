@@ -41,6 +41,11 @@ input.on("line", (line) => {
     }
     handleLoginStart(request);
   } else if (request.method === "account/read") {
+    // Codex 0.16x rejects this request without a params object.
+    if (request.params == null) { write({ id: request.id, error: { code: -32600, message: "Invalid request: missing field `params`" } }); return; }
+    if (mode === "read-hangs") return;
+    if (mode === "exit-on-read") process.exit(0);
+    if (mode === "read-fails") { write({ id: request.id, error: { code: -32000, message: "account unavailable" } }); return; }
     result(request.id, { requiresOpenaiAuth: false, account: { type: "chatgpt", email: "alex@example.com", planType: "plus" } });
   } else if (request.method === "account/login/cancel") {
     result(request.id, { status: "canceled" });
@@ -63,5 +68,5 @@ function handleLoginStart(request) {
   if (mode === "failure") setTimeout(() => notify("account/login/completed", { loginId, success: false, error: "Authentication was canceled by the server" }), 5);
   if (mode === "device-disabled") setTimeout(() => notify("account/login/completed", { loginId, success: false, error: "Device-code authentication is disabled" }), 5);
   if (mode === "success" || mode === "unknown-request" || mode === "env-check") setTimeout(() => notify("account/login/completed", { loginId: "some-other-login", success: true }), 5);
-  if (mode === "success" || mode === "unknown-request" || mode === "device-success" || mode === "env-check") setTimeout(() => notify("account/login/completed", { loginId, success: true }), 15);
+  if (mode === "success" || mode === "unknown-request" || mode === "device-success" || mode === "env-check" || mode === "read-fails" || mode === "read-hangs" || mode === "exit-on-read") setTimeout(() => notify("account/login/completed", { loginId, success: true }), 15);
 }

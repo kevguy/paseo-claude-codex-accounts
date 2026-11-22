@@ -48,6 +48,30 @@ test("starts device-code login with its verification URL and user code", async (
   } finally { await rm(parent, { recursive: true, force: true }); }
 });
 
+test("still reports success when the account details can't be read afterwards", async () => {
+  const parent = await makeHome();
+  try {
+    const session = await startCodexLogin(join(parent, "codex"), "device-code", deps("read-fails"));
+    assert.deepEqual(await session.done, { ok: true });
+  } finally { await rm(parent, { recursive: true, force: true }); }
+});
+
+test("still reports success when the account details never arrive", async () => {
+  const parent = await makeHome();
+  try {
+    const session = await startCodexLogin(join(parent, "codex"), "device-code", deps("read-hangs", { accountReadTimeoutMs: 50 }));
+    assert.deepEqual(await session.done, { ok: true });
+  } finally { await rm(parent, { recursive: true, force: true }); }
+});
+
+test("still reports success when the app-server exits after signing in", async () => {
+  const parent = await makeHome();
+  try {
+    const session = await startCodexLogin(join(parent, "codex"), "device-code", deps("exit-on-read"));
+    assert.deepEqual(await session.done, { ok: true });
+  } finally { await rm(parent, { recursive: true, force: true }); }
+});
+
 test("maps a server-side login failure to plain English", async () => {
   const parent = await makeHome();
   try {
