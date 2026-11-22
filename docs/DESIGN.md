@@ -21,7 +21,10 @@ second.
   `label`, `env`, `enabled` and `order` persist. `removeProviders: [id]`
   deletes an entry. The daemon validates, saves and applies the change.
   Source: `daemon-config-store.js` (`applyMutableProviderConfigToOverrides`).
-  Live application still needs a prototype check.
+  Proven 2026-11-22: a patch from a Node client added `claude-ptest`; `paseo provider
+  ls` showed it at once with no reload; `removeProviders` restored the config
+  byte-identical. Paseo's availability check creates the config folder
+  (`.claude.json`, `plugins/`, `sessions/`, `backups/`) as soon as the entry exists.
 - **Per-session usage.** The Claude and Codex agents report
   `provider: "claude" | "codex"` with their own harness environment, so the
   built-in usage sources already pick the right account (including the
