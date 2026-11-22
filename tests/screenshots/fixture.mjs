@@ -46,7 +46,7 @@ await writeFile(join(paseoHome, "config.json"), JSON.stringify({
   version: 1,
   daemon: { listen: `127.0.0.1:${DAEMON_PORT}`, cors: { allowedOrigins: [`http://127.0.0.1:${WEB_PORT}`] }, relay: { enabled: false } },
   pluginsEnabled: true,
-  plugins: { "paseo-accounts": { source: "directory", path: pluginDir, enabled: true } },
+  plugins: { "paseo-baton": { source: "directory", path: pluginDir, enabled: true } },
   agents: {
     providers: {
       "claude-work": { extends: "claude", label: "Claude (Work)", env: { CLAUDE_CONFIG_DIR: work } },

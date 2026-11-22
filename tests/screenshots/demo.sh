@@ -45,7 +45,9 @@ rm -rf .validation/demo-plugin && mkdir -p .validation/demo-plugin
 cp -R paseo-plugin.json index.client.tsx index.server.ts client server shared package.json npm-shrinkwrap.json LICENSE .validation/demo-plugin/
 node tests/screenshots/fixture.mjs .validation/demo .validation/demo-plugin > /dev/null
 mkdir -p "$D/home/projects/acme-web"
-HOME="$D/home" PASEO_HOME="$D/paseo-home" nohup "$PASEO" daemon run --home "$D/paseo-home" > "$D/daemon.log" 2>&1 &
+# Made-up usage readings for the screenshots; the fixture's logins are fictional and can't be read.
+DEMO_USAGE='{"claude":{"usedPct":97,"summary":"5h 97% · wk 64%"},"claude-work":{"usedPct":31,"summary":"5h 12% · wk 31%"},"claude-client-a":{"usedPct":58,"summary":"5h 58% · wk 40%"},"codex":{"usedPct":20,"summary":"5h 20% · wk 9%"},"codex-work":{"usedPct":44,"summary":"5h 44% · wk 25%"}}'
+HOME="$D/home" PASEO_HOME="$D/paseo-home" PASEO_BATON_DEMO_USAGE="$DEMO_USAGE" nohup "$PASEO" daemon run --home "$D/paseo-home" > "$D/daemon.log" 2>&1 &
 echo $! > "$RUN/daemon.pid"
 for i in $(seq 1 30); do grep -q "Plugin ready" "$D/daemon.log" 2>/dev/null && break; sleep 1; done
 HOME="$D/home" node tests/screenshots/add-project.mjs "$ASAR" "$D/paseo-home" "$D/home/projects/acme-web" > /dev/null

@@ -1,6 +1,8 @@
 import type { PluginClientContext, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { ScrollView } from "react-native";
 import { AccountsScreen } from "./client/accounts";
+import { AccountControl, SwitchRowView } from "./client/composer";
+import { SWITCH_ROW_KIND, switchRowSchema } from "./shared/baton";
 
 const SETTINGS_ID = "accounts";
 const PANEL_ID = "accounts";
@@ -21,12 +23,15 @@ export default function contribute(client: PluginClientContext) {
     client.addWorkspacePanel({ id: PANEL_ID, title: "Accounts", icon: "Users", locations: ["workspace"], Component: AccountsPanel }),
     client.addCommandCenterItem({
       id: "accounts",
-      title: "Manage Claude and Codex accounts",
+      title: "Baton: Claude and Codex accounts",
       icon: "Users",
       keywords: ["account", "login", "sign in", "claude", "codex", "profile", "settings"],
       context: "global",
       onSelect: ({ openSettings }) => openSettings(SETTINGS_ID),
     }),
+    // The account a chat runs on, in every message box; it also moves a running Claude chat.
+    client.addComposerItem({ id: "account", Component: AccountControl }),
+    client.addTimelineRenderer({ kind: SWITCH_ROW_KIND, version: 1, schema: switchRowSchema, Component: SwitchRowView }),
   ];
   return () => cleanups.forEach((cleanup) => cleanup());
 }

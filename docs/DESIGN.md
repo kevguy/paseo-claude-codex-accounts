@@ -1,4 +1,4 @@
-# Paseo Accounts: design
+# Baton: design
 
 Status: draft for 0.1, 2026-11-22. Bead `pad-5xc`.
 
@@ -148,10 +148,41 @@ macOS, Linux and Windows are all supported:
 The README documents the manual steps for each platform (POSIX shell and
 PowerShell).
 
-## Out of scope for 0.1
+## Switching a chat between accounts (Baton, 1.0)
 
-Cursor, sharing settings, skills or MCP between accounts, deleting account
-folders, and automatic account rotation.
+Verified on Claude Code 2.1.328 and Paseo 0.16.2, 2026-11-22.
+
+- **Login-only switch.** Claude Code reads its login from `CLAUDE_SECURESTORAGE_CONFIG_DIR` when
+  set (macOS Keychain service `Claude Code-credentials-<sha256(NFC dir)[:8]>`; elsewhere
+  `<dir>/.credentials.json`), and everything else from `CLAUDE_CONFIG_DIR`. Checked with
+  `claude auth status`: default config + the work folder's login reports the work subscription.
+  An **empty** value selects the default login (the unsuffixed Keychain item); pointing it at
+  `~/.claude` finds nothing on macOS, so Baton uses `""` for the default account.
+- **Applying it.** `agent.open.before` may change only `env`, `tools` and `mcpServers`; its env
+  overrides the provider's. Baton stores the account in agent metadata (`baton.account`) and sets
+  the variable on every open (create, resume, refresh, import, history). `agents.ref(id).reload()`
+  reopens with reason `refresh`. Live test: a Haiku chat moved personal → work → personal; inside
+  it `claude auth status` went `max` → `enterprise` → `max`, and it kept its conversation.
+- **Paseo can't change a running agent's provider** (`agent.config.apply` has no provider), so a
+  switched chat keeps its provider label; Baton's message-box control shows the real account.
+- **Limits.** Paseo passes plugins only the failed turn's text (Claude's `rate_limit_event` and
+  Codex's `codexErrorInfo` are not forwarded). Baton matches the CLI wording (patterns adapted from
+  ZeroSub, MIT) and, when the text isn't recognised, reads the account's usage; a window at 100%
+  counts as a limit.
+- **Codex** encrypts a conversation per ChatGPT account, so Codex chats choose their account at
+  creation (`agent.create.before` may change `config.provider`) and don't move.
+- **Sign-in in the app.** Claude: `claude auth login --claudeai` with `BROWSER` pointing at a script
+  that records the host-only link; the CLI also prints a link whose page shows `code#state`, which
+  is written to the CLI's stdin. The CLI exits on a wrong code. Codex: `codex app-server`,
+  `account/login/start` with `chatgpt` or `chatgptDeviceCode`; its messages carry no `"jsonrpc"`
+  field.
+- **Timeline notes** need a kind of lowercase letters, digits and dashes (`baton-switch`).
+- **Plugin build** rejects server imports of `@getpaseo/client`, even type-only ones.
+
+## Out of scope
+
+Cursor and other providers, moving Codex conversations between accounts, deleting account folders,
+and keeping "wait for the reset" across a Paseo restart.
 
 ## Release checklist (Kevin, 2026-11-22)
 
