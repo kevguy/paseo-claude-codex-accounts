@@ -29,8 +29,8 @@ Works on macOS, Linux and Windows.
 - **Built for scripts and orchestrators:** start a chat on an account with
   `paseo run --label account=claude-work`, or let agents move chats with two tools.
 - **Both CLIs, every platform.** Claude and Codex, on macOS, Linux and Windows, with CI on all three.
-- **Careful with your logins.** It never shows, logs or stores a token; a login is read only to ask
-  that provider's own API for usage. If a new sign-in put someone else's login behind an account,
+- **Careful with your logins.** It never shows, logs or stores a token; logins are read only to show
+  who an account is and to ask that provider's own API for usage. If a new sign-in put someone else's login behind an account,
   it tells you (see [Privacy](#privacy)).
 
 ## Built from what people asked for
@@ -47,7 +47,7 @@ most, and all of them are here:
 | Move before the limit, not after | Optional early switch at 80, 90 or 95% |
 | What to do when every account is out | Optional wait for the first reset, then carry on |
 | Usage for every account, not just the default | A Usage-page card per account, and room shown in the account menu |
-| Tell accounts apart | Email and plan on every account, and the organisation for Claude |
+| Tell accounts apart | Email and plan wherever the provider reports them, and the organisation for Claude |
 | Pick the account per chat, or let it choose | An account, "Most headroom", or folder rules |
 | Accounts per project | Folder rules with `*` and `**`; the most specific wins |
 | Manage and sign in without a terminal | Add, sign in, hide and remove in the app, from any device |
