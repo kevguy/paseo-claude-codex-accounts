@@ -28,12 +28,17 @@ export type Rule = z.infer<typeof ruleSchema>;
 export const switchingSettings = defineSettings({
   id: "switching",
   scope: "host",
-  version: 1,
+  // Version 2 made automatic switching opt-in. Saving any setting under version 1 stored it as on,
+  // so the migration turns it off once; people who want it turn it back on.
+  version: 2,
   schema: z.object({
     /** Folder rules for new chats, e.g. ~/work/** → Claude (Work). */
     rules: z.array(ruleSchema).max(200).default([]),
-    /** Move a chat to another account when its account hits a usage limit. */
-    autoSwitch: z.boolean().default(true),
+    /**
+     * Move a chat to another account when its account hits a usage limit. Off by default: it can carry a
+     * conversation on under another account or organisation, including a chat a folder rule placed.
+     */
+    autoSwitch: z.boolean().default(false),
     /** Also move a chat, between turns, once its account passes this share of a limit. 100 turns it off. */
     switchBeforePercent: z.number().int().min(50).max(100).default(95),
     /** After an automatic move caused by a limit, tell the chat to carry on. */
@@ -45,7 +50,13 @@ export const switchingSettings = defineSettings({
     /** New chats with no rule and no explicit choice: keep the picker's provider, or pick the account with most headroom. */
     newChats: z.enum(["picker", "most-headroom"]).default("picker"),
   }),
+  migrate: (values, fromVersion) => migrateSwitching(values, fromVersion),
 });
+
+export function migrateSwitching(values: unknown, fromVersion: number): unknown {
+  if (fromVersion >= 2 || !values || typeof values !== "object") return values;
+  return { ...(values as Record<string, unknown>), autoSwitch: false };
+}
 export type SwitchingOptions = z.infer<typeof switchingSettings.schema>;
 export const DEFAULT_SETTINGS: SwitchingOptions = switchingSettings.schema.parse({});
 
