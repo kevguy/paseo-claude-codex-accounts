@@ -379,6 +379,10 @@ test("usage keys stay per folder, so two seats of one workspace keep their own c
   const keys = (await discoverAccounts("codex", { kind: "global" }, host)).map((a) => a.key);
   assert.deepEqual(keys.sort(), ["codex-client.same-workspace", "codex-work.same-workspace"]);
   assert.equal(folderKey("claude-x", "k".repeat(200)).length, 128);
+  // One key outside Paseo's pattern would make the daemon reject the whole source's discovery.
+  for (const key of [...keys, folderKey("claude-x", "k".repeat(200)), folderKey("claude-work", "0f1e2d3c-aaaa-bbbb-cccc-111122223333.9a8b7c6d-dddd-eeee-ffff-444455556666")]) {
+    assert.match(key, /^[A-Za-z0-9._-]{1,128}$/);
+  }
 });
 
 test("a broken config.json is reported without quoting it", async () => {
