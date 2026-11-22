@@ -1,0 +1,40 @@
+{
+  "name": "@kevlai22/paseo-accounts",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Run several Claude and Codex accounts side by side in Paseo.",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/kevguy/paseo-accounts.git" },
+  "keywords": ["paseo", "paseo-plugin", "claude", "codex", "accounts"],
+  "files": [
+    "paseo-plugin.json",
+    "index.client.tsx",
+    "index.server.ts",
+    "client/",
+    "server/",
+    "shared/",
+    "docs/",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "npm-shrinkwrap.json"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.16.1",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/react": "~19.2.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3"
+  }
+}

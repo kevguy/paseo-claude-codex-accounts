@@ -1,0 +1,18 @@
+{
+  "id": "paseo-accounts",
+  "name": "Accounts",
+  "description": "Run several Claude and Codex accounts side by side: add, sign in, check and hide them in one place.",
+  "requirements": {
+    "paseo": ">=0.16.1"
+  },
+  "build": [
+    [
+      "npm",
+      "ci",
+      "--omit=dev",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund"
+    ]
+  ]
+}
