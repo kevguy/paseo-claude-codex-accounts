@@ -1,6 +1,6 @@
 {
   "name": "@kevlai22/paseo-claude-codex-accounts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "description": "Claude & Codex Accounts for Paseo: move a chat to another Claude account mid-conversation, and keep working when one hits its limit.",
   "license": "MIT AND Apache-2.0",
@@ -35,8 +35,10 @@
     "docs/DESIGN.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "OVERVIEW.md",
     "README.md",
-    "npm-shrinkwrap.json"
+    "npm-shrinkwrap.json",
+    "docs/screenshots/*.png"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
