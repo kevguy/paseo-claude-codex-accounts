@@ -381,7 +381,8 @@ test("failover ignores an old 100 percent reading once the account's limit has r
   assert.equal(h.agent.metadata[META_ACCOUNT], "claude-work");
   assert.equal(h.calls.timeline.at(-1)?.data.reason, "limit");
 }));
-test("switchTo queues the move, inside Paseo's request limit, when a turn starts and outlasts the wait", async () => withHarness(async (h) => {
+// Paseo times plugin requests out at 30 s; with a 50 ms wait this must settle in a few seconds.
+test("switchTo queues the move, inside Paseo's request limit, when a turn starts and outlasts the wait", { timeout: 5_000 }, async () => withHarness(async (h) => {
   // The chat is idle when asked, then a queued message starts a turn that keeps running.
   const refresh = h.handle.refresh.bind(h.handle);
   let refreshes = 0;

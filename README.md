@@ -28,6 +28,34 @@ Works on macOS, Linux and Windows.
   `~/.codex-<name>`, the same folders `CLAUDE_CONFIG_DIR=~/.claude-work claude` uses.
 - **Built for scripts and orchestrators:** start a chat on an account with
   `paseo run --label account=claude-work`, or let agents move chats with two tools.
+- **Both CLIs, every platform.** Claude and Codex, on macOS, Linux and Windows, with CI on all three.
+- **Careful with your logins.** It never reads, logs or stores a token, and it warns you if
+  signing in again would put someone else's login behind an account (see [Privacy](#privacy)).
+
+## Built from what people asked for
+
+Paseo's directory lists several plugins for running more than one account. Before building this
+one, we read the feature requests on them and on the CLIs. These are the ones people asked for
+most, and all of them are here:
+
+| Asked for | Here |
+| --- | --- |
+| Switch account without losing the conversation | Any Claude chat, any time, from the message box |
+| Keep working when an account hits its limit | Automatic move, then it carries on by itself |
+| Don't rely on the error wording | A limit is spotted from the message *or* the real usage reading |
+| Move before the limit, not after | Optional early switch at 80, 90 or 95% |
+| What to do when every account is out | Optional wait for the first reset, then carry on |
+| Usage for every account, not just the default | A Usage-page card per account, and room shown in the account menu |
+| Tell accounts apart | Email, organisation and plan on every account |
+| Pick the account per chat, or let it choose | An account, "Most headroom", or folder rules |
+| Accounts per project | Folder rules with `*` and `**`; the most specific wins |
+| Manage and sign in without a terminal | Add, sign in, hide and remove in the app, from any device |
+| Control from scripts | `paseo run --label account=…` |
+| Let agents manage accounts | Optional `accounts_list` and `accounts_switch` tools |
+| Don't swap the person behind an account by mistake | A warning when a sign-in changes who an account is |
+
+What it can't do yet is under [Limits](#limits): most importantly, Codex chats can't change
+account, because Codex encrypts each conversation for the account that started it.
 
 <p>
   <img src="docs/screenshots/switching.png" alt="Switching settings: automatic switching, switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
