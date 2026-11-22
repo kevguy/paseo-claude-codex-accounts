@@ -1,7 +1,7 @@
 {
-  "id": "paseo-accounts",
-  "name": "Accounts",
-  "description": "Run several Claude and Codex accounts side by side: add, sign in, check and hide them in one place.",
+  "id": "paseo-claude-codex-accounts",
+  "name": "Claude & Codex Accounts",
+  "description": "Move a Claude chat to another account mid-conversation, and keep working when one hits its limit. Every Claude and Codex account in one place, with usage, in-app sign-in and folder rules. macOS, Linux and Windows.",
   "requirements": {
     "paseo": ">=0.16.1"
   },

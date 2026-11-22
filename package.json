@@ -1,24 +1,29 @@
 {
-  "name": "@kevlai22/paseo-accounts",
-  "version": "0.1.0",
+  "name": "@kevlai22/paseo-claude-codex-accounts",
+  "version": "1.0.0",
   "private": false,
-  "description": "Run several Claude and Codex accounts side by side in Paseo.",
+  "description": "Claude & Codex Accounts for Paseo: move a chat to another Claude account mid-conversation, and keep working when one hits its limit.",
   "license": "MIT AND Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kevguy/paseo-accounts.git"
+    "url": "git+https://github.com/kevguy/paseo-claude-codex-accounts.git"
   },
-  "homepage": "https://github.com/kevguy/paseo-accounts#readme",
+  "homepage": "https://github.com/kevguy/paseo-claude-codex-accounts#readme",
   "bugs": {
-    "url": "https://github.com/kevguy/paseo-accounts/issues"
+    "url": "https://github.com/kevguy/paseo-claude-codex-accounts/issues"
   },
   "keywords": [
     "paseo",
     "paseo-plugin",
     "claude",
     "codex",
-    "accounts"
+    "accounts",
+    "claude-code",
+    "multi-account",
+    "account-switcher",
+    "failover",
+    "usage-limits"
   ],
   "files": [
     "paseo-plugin.json",
@@ -29,6 +34,7 @@
     "shared/",
     "docs/DESIGN.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "README.md",
     "npm-shrinkwrap.json"
   ],

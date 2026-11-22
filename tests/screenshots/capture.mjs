@@ -16,7 +16,7 @@ await page.waitForTimeout(3000);
 // First-run setup shows only when the host has no projects yet.
 const skip = page.getByText("Skip setup");
 if (await skip.isVisible()) await skip.click();
-await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-accounts/accounts`);
+await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-claude-codex-accounts/accounts`);
 await page.getByText(/^Claude accounts/).waitFor({ timeout: 20000 });
 await page.waitForTimeout(1500);
 console.log("URL", page.url());
@@ -32,7 +32,7 @@ const top = (locator) => locator.evaluate((element) => element.scrollIntoView({ 
 await top(page.getByText(/^Codex accounts/));
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${outDir}/accounts-codex.png`, clip: column(0) });
-await page.getByPlaceholder("Work").fill("Client B");
+await page.getByPlaceholder("Work", { exact: true }).fill("Client B");
 await top(page.getByText("Add an account", { exact: true }));
 await page.waitForTimeout(500);
 const heading = await page.getByText("Add an account", { exact: true }).boundingBox();
@@ -52,15 +52,37 @@ await card.getByText("Remove", { exact: true }).click();
 await page.getByText("Claude (Client B)", { exact: true }).waitFor({ state: "detached", timeout: 10000 });
 console.log("REMOVE ok");
 
-// The same screen as a workspace tab: open the demo workspace, then + → Accounts.
-await page.goto("http://127.0.0.1:6792/");
-await page.getByText("main", { exact: true }).first().click({ timeout: 20000 });
-await page.waitForTimeout(2000);
-await page.getByRole("button", { name: "New tab" }).first().click();
+// Switching settings.
+await page.goto(`http://127.0.0.1:6792/settings/hosts/${serverId}/plugins/paseo-claude-codex-accounts/accounts`);
+await page.getByText(/^Claude accounts/).waitFor({ timeout: 20000 });
+await top(page.getByText("Switching", { exact: true }));
 await page.waitForTimeout(800);
-await page.getByText("Accounts", { exact: true }).last().click();
-await page.getByText(/^Claude accounts/).waitFor({ timeout: 15000 });
+const switching = await page.getByText("Switching", { exact: true }).boundingBox();
+const tools = await page.getByText("Scripts and orchestrators", { exact: true }).boundingBox();
+await page.screenshot({ path: `${outDir}/switching.png`, clip: { ...column(switching.y - 16), height: tools.y - 8 - (switching.y - 16) } });
+console.log("SWITCHING ok");
+
+// The account control in a new chat's message box: open the demo workspace, start an agent, pick
+// a Claude model, then open the Account menu. The shot is clipped to the message box and menu.
+await page.goto("http://127.0.0.1:6792/");
+// The project, then its workspace row (an empty repository, so the row shows the folder name).
+await page.getByText("acme-web", { exact: true }).nth(1).click({ timeout: 20000 });
+await page.waitForTimeout(2000);
+await page.getByText("Agent", { exact: true }).first().click();
+await page.waitForTimeout(2000);
+await page.getByLabel("Select model (Select model)").click();
+await page.waitForTimeout(1000);
+await page.getByText(/^Claude$/).first().click();
+await page.waitForTimeout(1000);
+await page.getByText("Opus 5.5", { exact: true }).first().click();
+await page.waitForTimeout(2500);
+await page.getByLabel("Account for this chat").click();
+await page.getByText("Most headroom", { exact: true }).waitFor({ timeout: 10000 });
 await page.waitForTimeout(1200);
-await page.screenshot({ path: `${outDir}/accounts-panel.png` });
-console.log("PANEL ok");
+const composer = await page.getByLabel("Message agent...").boundingBox();
+const menu = await page.getByText("Most headroom", { exact: true }).boundingBox();
+const x = Math.max(composer.x - 24, 330);
+const y = menu.y - 110;
+await page.screenshot({ path: `${outDir}/account-menu.png`, clip: { x, y, width: size.width - x - 40, height: size.height - y - 8 } });
+console.log("ACCOUNT MENU ok");
 await browser.close();

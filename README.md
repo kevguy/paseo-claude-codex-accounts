@@ -1,64 +1,132 @@
-# Accounts for Paseo
+# Claude & Codex Accounts
 
-Run several Claude and Codex accounts side by side in Paseo: work, personal, a client's, or ten
-of them. Each account appears as its own provider in the model picker, with its own login,
-settings and history. Accounts adds, signs in, checks, hides and removes them from one screen.
+**Move a Claude chat to another account mid-conversation, and keep working when one hits its
+limit.** Run all your Claude and Codex accounts side by side in Paseo — work, personal, a
+client's — and hand a chat from one to the next without losing a word.
 
 Works on macOS, Linux and Windows.
 
-![Accounts in Paseo: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in](docs/screenshots/accounts.png)
+![The account menu in Paseo's message box: each Claude account with its email, organisation, plan and how much of its limits it has used](docs/screenshots/account-menu.png)
+
+## What makes it different
+
+- **A chat keeps everything when it changes account.** The plugin swaps only the login a chat uses.
+  The conversation, your settings, MCP servers, skills and hooks stay exactly as they were, so
+  nothing is copied, linked or merged between folders.
+- **Failover that doesn't depend on wording.** A chat moves when its account hits a limit,
+  spotted either from the CLI's message *or* from the account's real usage reading, so a
+  reworded message doesn't quietly turn failover off. It can also move early, at 80–95%.
+- **It can carry on by itself.** After a move it tells the chat to continue, but only if you
+  haven't written to it since. When every account is at its limit, it can wait for the first reset.
+- **Every account's usage, before you start.** Each extra account gets its own card on Paseo's
+  Usage page, and the message box shows how much room each one has.
+- **Sign in from anywhere**, phone included: Claude's page gives you a code to paste back, and
+  Codex shows a short device code. A terminal works too.
+- **Folder rules with wildcards:** `~/work/**` → Work, `~/clients/acme` → Client A. The most
+  specific rule wins, on every platform.
+- **Plain folders you can use from a terminal.** Accounts live in `~/.claude-<name>` and
+  `~/.codex-<name>`, the same folders `CLAUDE_CONFIG_DIR=~/.claude-work claude` uses.
+- **Built for scripts and orchestrators:** start a chat on an account with
+  `paseo run --label account=claude-work`, or let agents move chats with two tools.
+- **Both CLIs, every platform.** Claude and Codex, on macOS, Linux and Windows, with CI on all three.
+- **Careful with your logins.** It never shows, logs or stores a token; logins are read only to show
+  who an account is and to ask that provider's own API for usage. If a new sign-in put someone else's login behind an account,
+  it tells you (see [Privacy](#privacy)).
+
+## Built from what people asked for
+
+Paseo's directory lists several plugins for running more than one account. Before building this
+one, we read the feature requests on them and on the CLIs. These are the ones people asked for
+most, and all of them are here:
+
+| Asked for | Here |
+| --- | --- |
+| Switch account without losing the conversation | Any Claude chat, from the message box (mid-turn, it moves when the turn ends) |
+| Keep working when an account hits its limit | Claude chats move and carry on by themselves; Codex chats say which account to use |
+| Don't rely on the error wording | A limit is spotted from the message *or* the real usage reading |
+| Move before the limit, not after | Optional early switch at 80, 90 or 95% |
+| What to do when every account is out | Optional wait for the first reset, then carry on |
+| Usage for every account, not just the default | A Usage-page card per account, and room shown in the account menu |
+| Tell accounts apart | Email and plan wherever the provider reports them, and the organisation for Claude |
+| Pick the account per chat, or let it choose | An account, "Most headroom", or folder rules |
+| Accounts per project | Folder rules with `*` and `**`; the most specific wins |
+| Manage and sign in without a terminal | Add, sign in, hide and remove in the app, from any device |
+| Control from scripts | `paseo run --label account=…` |
+| Let agents manage accounts | Optional `accounts_list` and `accounts_switch` tools |
+| Don't swap the person behind an account by mistake | A warning when a sign-in has changed who an account is |
+
+What it can't do yet is under [Limits](#limits): most importantly, Codex chats can't change
+account, because Codex encrypts each conversation for the account that started it.
 
 <p>
-  <img src="docs/screenshots/accounts-codex.png" alt="A Codex account opened to show sign-in, its copyable sign-in command and Remove" width="49%">
-  <img src="docs/screenshots/accounts-add.png" alt="Adding an account named Client B, which will use the folder ~/.claude-client-b" width="49%">
+  <img src="docs/screenshots/switching.png" alt="Switching settings: automatic switching, switching early at 95%, carrying on after a limit, waiting out a limit, and how new chats pick an account" width="49%">
+  <img src="docs/screenshots/accounts.png" alt="The accounts screen: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in" width="49%">
 </p>
 
-<img src="docs/screenshots/accounts-panel.png" alt="Accounts open as a tab in a workspace, from the workspace's + menu" width="100%">
-
-<sub>Screenshots use made-up accounts. They come from Paseo's own web app driven by
+<sub>Screenshots use made-up accounts and usage. They come from Paseo's own web app driven by
 `tests/screenshots`.</sub>
-
-## What you can do
-
-- **Add an account.** Pick Claude or Codex, type a name such as "Work", and it appears in the
-  model picker as "Claude (Work)" with all of that provider's models and modes.
-- **Sign in.** Open a terminal that runs the right sign-in command for that account, or copy the
-  command and run it yourself.
-- **See every account's usage.** Paseo's Usage page gets a "Claude accounts" and a "Codex
-  accounts" card for each extra account, with the same limits and plan Paseo shows for your
-  default one.
-- **See who's signed in.** Each account shows whether it's signed in, with its email,
-  organisation and plan.
-- **Keep the picker tidy.** Hide an account you don't use often; its login stays, ready for later.
-- **Remove an account.** This removes it from Paseo but keeps its folder and login, so adding it
-  again with the same name picks the login back up.
-- **Create profiles on top.** Paseo's own "Create profile" works with any account, for example
-  "UI work: Opus on Claude (Work)".
 
 ## Install
 
 With Paseo 0.16.1 or later:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-accounts@0.1.0
+paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.0
 ```
 
-Open it from **Settings → Plugins → Accounts**, as a tab from a workspace's **+** menu, or by
-searching "accounts" in the Command Center. In a workspace tab, sign-in terminals open in that
-workspace.
+Open it from **Settings → Plugins → Claude & Codex Accounts**, from a workspace's **+** menu (**Accounts**), or by
+searching "accounts" in the Command Center.
 
-## How it works
+## Using it
 
-Paseo already supports extra providers that extend Claude or Codex with their own environment
-([custom providers](https://paseo.sh/docs/custom-providers)). Each CLI keeps its login in a
-folder you choose:
+**Add an account.** Pick Claude or Codex, type a name such as "Work", and sign in with **Sign in
+here**. It also appears in the model picker as "Claude (Work)".
+
+**Pick the account for a chat** from the **Account** control in the message box. In a new chat,
+choose an account, **Most headroom**, or leave it **as configured** (folder rules, else the model
+picker's account). In a running Claude chat, choosing another account moves the chat there; if a
+turn is running, it moves when the turn ends.
+
+**Let it switch for you.** With **Switch Claude chats automatically** on (the default), a chat
+that hits a usage limit moves to the signed-in account with the most room and carries on. Each
+move adds a note to the chat saying where it went and why. To stop two busy accounts trading a
+chat back and forth, a chat moves automatically at most four times in ten minutes, and early
+moves only go to an account with real room.
+
+**Two ways to set up an account:**
+
+| You pick in the model picker | The chat uses |
+| --- | --- |
+| **Claude**, with an account chosen in the message box or by a folder rule | your usual `~/.claude` settings, MCP servers and history, signed in as that account |
+| **Claude (Work)** | everything from `~/.claude-work`: its own settings, MCP servers and history |
+
+**Scripts and orchestrators.** `paseo run --label account=claude-work "…"` (or
+`paseo import --label …`) starts a Claude chat on that account. For a Codex chat, pick the account's
+provider instead: `paseo run --provider codex-work "…"`. Turn on **Give agents account
+tools** and agents get `accounts_list` (every account's room, and which one a chat uses) and
+`accounts_switch` (move this chat or another).
+
+## How switching works
+
+Claude Code reads its login from `CLAUDE_SECURESTORAGE_CONFIG_DIR` when it is set, and everything
+else (settings, transcripts) from `CLAUDE_CONFIG_DIR`. The plugin records the account on the chat and,
+whenever Paseo opens that chat's session, points `CLAUDE_SECURESTORAGE_CONFIG_DIR` at the account's
+folder (on macOS, the Keychain item Claude derives from that folder). Then it asks Paseo to reopen
+the chat. The conversation resumes from the same transcript, on the new login.
+
+Codex can't do this: it encrypts a conversation for the ChatGPT account that started it. So Codex
+chats pick their account when they start (by the message box, a folder rule or **Most headroom**),
+and when a Codex account hits its limit the plugin says which account to start a new chat on.
+
+Accounts themselves are ordinary Paseo [custom providers](https://paseo.sh/docs/custom-providers),
+each with its own folder:
 
 | Provider | Variable | Default folder | Extra account folder |
 | --- | --- | --- | --- |
 | Claude | `CLAUDE_CONFIG_DIR` | `~/.claude` | `~/.claude-<name>` |
 | Codex | `CODEX_HOME` | `~/.codex` | `~/.codex-<name>` |
 
-Adding an account creates that folder and a provider entry such as:
+Adding an account creates the folder and a provider entry such as:
 
 ```json
 "agents": {
@@ -72,19 +140,25 @@ Adding an account creates that folder and a provider entry such as:
 }
 ```
 
-Accounts makes the change through Paseo's config API, so it takes effect at once without a
-restart. On macOS, Claude stores each folder's login under its own Keychain item, so accounts
-never overwrite each other.
+The plugin makes the change through Paseo's config API, so it takes effect at once.
 
-Status comes from each account's own files: the identity Claude records in `.claude.json`, the
-identity claims in Codex's `auth.json`, and whether a login exists. For status, Accounts never
-reads a Keychain secret; it only checks that the item exists.
+## Privacy
 
-Usage uses Paseo's own Claude and Codex usage code, unmodified and pointed at each extra
-account's folder ([server/vendor/paseo-usage](server/vendor/paseo-usage/README.md)). Like Paseo's
-built-in usage cards, it reads that account's login (from its credentials file, or on macOS its
-Keychain item) and sends it only to that provider's own usage API. Accounts never shows, logs or
-stores a token.
+- Status comes from each account's own files: the identity Claude records in `.claude.json`, the
+  identity claims in Codex's `auth.json`, and whether a login exists. For status, the plugin never reads
+  a Keychain secret; it only checks that the item exists.
+- Usage uses Paseo's own Claude and Codex usage code, unmodified and pointed at each extra account's
+  folder ([server/vendor/paseo-usage](server/vendor/paseo-usage/README.md)). Like Paseo's built-in
+  usage cards, it reads that account's login and sends it only to that provider's own usage API.
+- In-app sign-in runs the CLIs' own sign-in (`claude auth login`, `codex app-server`). The code you
+  paste goes straight to the CLI. The plugin never shows, logs or stores a token.
+- If signing in again puts a *different* person's login in a folder, the plugin warns you, because
+  every chat using that account would then run as them.
+
+<p>
+  <img src="docs/screenshots/accounts-codex.png" alt="A Codex account opened to show sign-in with a code, sign-in on the host computer, a terminal, and Remove" width="49%">
+  <img src="docs/screenshots/accounts-add.png" alt="Adding an account named Client B, which will use the folder ~/.claude-client-b" width="49%">
+</p>
 
 ## Setting an account up by hand
 
@@ -114,7 +188,7 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codex-work" | Out-N
 Codex refuses to start when `CODEX_HOME` doesn't exist, which is why the folder comes first.
 In PowerShell the variable stays set for the rest of that window; run
 `Remove-Item Env:CLAUDE_CONFIG_DIR` (or `Env:CODEX_HOME`) afterwards, or close the window. (The
-command Accounts gives you to copy clears it for you.)
+command the plugin gives you to copy clears it for you.)
 
 Check which account each folder holds: `claude auth status` (Claude) or `codex login status`
 (Codex), with the same variable set.
@@ -161,23 +235,25 @@ Add what you need to that account, for example
 
 Nothing is limited to one extra account:
 - Ten Claude accounts are ten folders and ten providers.
-- Status checks run at most three at a time and are cached for a minute.
+- Status checks run at most three at a time and are cached for a minute; usage readings are
+  cached and never fetched more than once every 90 seconds per account.
 - Hidden accounts stay out of the model picker.
 
 ## Limits
 
-- Sign-in happens in the CLI's own browser flow. Accounts opens the terminal for it but can't
-  sign in for you.
-- "Open terminal" needs a workspace on the host. Without one, copy the sign-in command.
-- A running agent's usage shows on Paseo's built-in card for that session; the "Claude accounts"
-  and "Codex accounts" cards on the Usage page list every extra account, hidden ones included.
-  Turn any card off on the Usage page itself. While an agent runs on an extra account, Paseo may
-  show that account on both its built-in card and the "Claude accounts" card; Paseo doesn't merge
-  cards from different sources. Each folder gets its own card, even when two hold the same login.
-- Accounts manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
-  their own folder are listed, but can only be hidden or shown here.
+- **Codex chats can't change account** (see above). New Codex chats can.
+- **MCP servers that sign in with OAuth** keep those logins with the account, so after a switch
+  a chat may need to sign in to such a server again on the new account.
+- **A switched chat's `/status`** shows the email cached in its own folder, not the account it now
+  runs on. The plugin's **Account** control shows the real one. Likewise, Paseo's built-in usage card for
+  that chat shows its provider's account; the plugin's cards show each account.
+- **Waiting out a limit** lives in the plugin, so a Paseo restart forgets it (the note in the chat
+  says when it would have carried on).
+- The plugin manages entries named `claude-<name>` and `codex-<name>`. Other provider entries with
+  their own folder are listed and can be switched to, but only hidden or shown here.
 - Removing an account doesn't delete its folder, and the login stays in it. Delete the folder
   yourself if you want it gone; on macOS also delete its "Claude Code-credentials-…" Keychain item.
+- "Open terminal" needs a workspace on the host. Without one, sign in here or copy the command.
 
 ## Development
 
@@ -197,4 +273,5 @@ and only stop processes they started. The comments at the top of each file give 
 behind it are in [docs/DESIGN.md](docs/DESIGN.md).
 
 MIT licensed. The vendored usage code in `server/vendor/paseo-usage` is Paseo's, under the
-Apache License 2.0.
+Apache License 2.0, and the limit-message patterns are adapted from ZeroSub (MIT). See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

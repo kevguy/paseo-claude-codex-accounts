@@ -3,6 +3,8 @@ import { SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsS
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { SignInHere } from "./signin";
+import { SwitchingSettings } from "./switching";
 import { KINDS, KIND_INFO, addRpc, listRpc, removeRpc, signInRpc, slugify, updateRpc, workspacesRpc, type Account, type AccountKind, type AccountStatus } from "../shared/accounts";
 
 type Theme = PluginSurfaceProps["theme"];
@@ -90,8 +92,9 @@ function AccountCard({ account, platform, workspaceId, inPanel, theme, onChanged
       />
       {open ? (
         <>
+        <SignInHere account={account} theme={theme} onDone={onChanged} />
         <SettingsAction
-          label={account.status.state === "signed-in" ? "Sign in again" : "Sign in"}
+          label={account.status.state === "signed-in" ? "Sign in again in a terminal" : "Sign in in a terminal"}
           hint={workspaceId ? (inPanel ? "Opens a terminal in this workspace" : "Opens a terminal in the selected workspace") : "Choose a workspace below, or copy the command"}
           actionLabel="Open terminal"
           disabled={busy || !workspaceId}
@@ -168,9 +171,9 @@ function AddAccount({ theme, platform, onAdded }: { theme: Theme; platform: stri
 export function AccountsScreen({ theme, host, navigation, workspaceId: panelWorkspace }: Pick<PluginSurfaceProps, "theme" | "host" | "navigation"> & { workspaceId?: string }) {
   const list = useRpc(listRpc), listWorkspaces = useRpc(workspacesRpc);
   const queryClient = useQueryClient();
-  const accountsKey = ["paseo-accounts", host.id];
+  const accountsKey = ["accounts-list", host.id];
   const accounts = useQuery({ queryKey: accountsKey, queryFn: () => list({ refresh: false }) });
-  const workspaces = useQuery({ queryKey: ["paseo-accounts-workspaces", host.id], queryFn: () => listWorkspaces({}), enabled: !panelWorkspace });
+  const workspaces = useQuery({ queryKey: ["accounts-workspaces", host.id], queryFn: () => listWorkspaces({}), enabled: !panelWorkspace });
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const chosenWorkspace = panelWorkspace ?? workspaceId ?? workspaces.data?.workspaces[0]?.id ?? null;
   const refresh = async () => queryClient.setQueryData(accountsKey, await list({ refresh: true }));
@@ -209,6 +212,7 @@ export function AccountsScreen({ theme, host, navigation, workspaceId: panelWork
         );
       })}
       <AddAccount theme={theme} platform={platform} onAdded={() => void refresh()} />
+      <SwitchingSettings theme={theme} accounts={accounts.data.accounts} platform={platform} />
       <SettingsSection title={panelWorkspace ? "Sign-in status" : "Sign-in terminal"}>
         <SettingsCard>
           {panelWorkspace ? null : workspaces.data?.workspaces.length ? (
