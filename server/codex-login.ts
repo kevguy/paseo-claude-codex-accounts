@@ -22,6 +22,8 @@ export interface CodexLoginDeps {
   timeoutMs?: number;
   /** How long the app-server has to answer before sign-in starts. */
   startupTimeoutMs?: number;
+  /** How long to wait for the account's details once sign-in has worked. */
+  accountReadTimeoutMs?: number;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -77,6 +79,7 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
   let buffer = "";
   let rpcId = 0;
   let terminal = false;
+  let signedIn = false;
   let loginId: string | undefined;
   const earlyCompletions: JsonRecord[] = [];
   let resolveDone!: (value: Awaited<CodexLoginSession["done"]>) => void;
@@ -112,9 +115,18 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
       finish({ ok: false, error: cleanError(params.error) });
       return;
     }
+    signedIn = true;
     completionChain = completionChain.then(async () => {
+      if (terminal) return;
+      let readTimer: NodeJS.Timeout | undefined;
       try {
-        const result = record(await request("account/read"));
+        // Current Codex rejects account/read without a params object.
+        const read = request("account/read", {});
+        read.catch(() => undefined);
+        const timedOut = new Promise<never>((_, reject) => {
+          readTimer = delay(() => reject(new Error("account/read timed out")), deps.accountReadTimeoutMs ?? 10_000) as unknown as NodeJS.Timeout;
+        });
+        const result = record(await Promise.race([read, timedOut]));
         const account = record(result?.account);
         finish({
           ok: true,
@@ -122,7 +134,10 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
           ...(typeof account?.planType === "string" && account.planType ? { plan: account.planType } : {}),
         });
       } catch {
-        finish({ ok: false, error: "Sign-in completed, but account details couldn't be read." });
+        // The sign-in itself worked; the account list reads the details again later.
+        finish({ ok: true });
+      } finally {
+        if (readTimer) clearTimeout(readTimer);
       }
     });
   };
@@ -159,6 +174,8 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
 
   const earlyExit = (code: number | null, signal: NodeJS.Signals | null) => {
     if (terminal) return;
+    // Codex already saved the sign-in; only the details read was cut short.
+    if (signedIn) { finish({ ok: true }); return; }
     const error = new Error(exitMessage(code, signal, stderr));
     for (const waiter of pending.values()) waiter.reject(error);
     pending.clear();
@@ -167,7 +184,7 @@ export async function startCodexLogin(codexHome: string, method: CodexLoginMetho
   child.once("error", (error) => {
     const safe = new Error(`Couldn't start Codex app-server (${error.message.slice(0, 120)})`);
     if (!loginId) finishStartupError(safe);
-    else finish({ ok: false, error: safe.message });
+    else finish(signedIn ? { ok: true } : { ok: false, error: safe.message });
   });
   child.once("close", earlyExit);
 
