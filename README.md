@@ -71,7 +71,7 @@ account, because Codex encrypts each conversation for the account that started i
 With Paseo 0.16.1 or later:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.0
+paseo plugin install npm:@kevlai22/paseo-claude-codex-accounts@1.0.1
 ```
 
 Open it from **Settings → Plugins → Claude & Codex Accounts**, from a workspace's **+** menu (**Accounts**), or by

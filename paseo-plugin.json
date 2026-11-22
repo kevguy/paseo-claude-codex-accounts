@@ -2,6 +2,12 @@
   "id": "paseo-claude-codex-accounts",
   "name": "Claude & Codex Accounts",
   "description": "Move a Claude chat to another account mid-conversation, and keep working when one hits its limit. Every Claude and Codex account in one place, with usage, in-app sign-in and folder rules. macOS, Linux and Windows.",
+  "media": [
+    "docs/screenshots/account-menu.png",
+    "docs/screenshots/switching.png",
+    "docs/screenshots/accounts.png",
+    "docs/screenshots/accounts-codex.png"
+  ],
   "requirements": {
     "paseo": ">=0.16.1"
   },
