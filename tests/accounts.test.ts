@@ -58,13 +58,13 @@ test("Keychain item names match Claude's per-folder naming", () => {
 test("sign-in commands set the folder for extra accounts but never for the default", () => {
   const [posix, ps] = signInCommands("claude", "/home/alex/.claude-work");
   assert.equal(posix!.text, "mkdir -p '/home/alex/.claude-work' && CLAUDE_CONFIG_DIR='/home/alex/.claude-work' claude auth login");
-  assert.equal(ps!.text, "New-Item -ItemType Directory -Force -Path '/home/alex/.claude-work' | Out-Null; $env:CLAUDE_CONFIG_DIR = '/home/alex/.claude-work'; claude auth login; Remove-Item Env:CLAUDE_CONFIG_DIR");
+  assert.equal(ps!.text, "New-Item -ItemType Directory -Force -Path '/home/alex/.claude-work' | Out-Null; $env:CLAUDE_CONFIG_DIR = '/home/alex/.claude-work'; try { claude auth login } finally { Remove-Item Env:CLAUDE_CONFIG_DIR }");
   assert.deepEqual(signInCommands("codex", null).map((c) => c.text), ["codex login", "codex login"]);
   assert.match(signInCommands("claude", "/home/o'neil/.claude-a")[0]!.text, /'\/home\/o'\\''neil\/\.claude-a'/);
   const [shortPosix, shortPs] = signInCommands("codex", "/home/alex/.codex-work", { homedir: "/home/alex", platform: "linux" });
   assert.equal(shortPosix!.text, 'mkdir -p "$HOME/.codex-work" && CODEX_HOME="$HOME/.codex-work" codex login');
-  assert.equal(shortPs!.text, 'New-Item -ItemType Directory -Force -Path "$HOME\\.codex-work" | Out-Null; $env:CODEX_HOME = "$HOME\\.codex-work"; codex login; Remove-Item Env:CODEX_HOME');
-  assert.match(signInCommands("claude", "C:\\Users\\Alex\\.claude-work", { homedir: "C:\\Users\\Alex", platform: "win32" })[1]!.text, /"\$HOME\\\.claude-work"/);
+  assert.equal(shortPs!.text, 'New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\\.codex-work" | Out-Null; $env:CODEX_HOME = "$env:USERPROFILE\\.codex-work"; try { codex login } finally { Remove-Item Env:CODEX_HOME }');
+  assert.match(signInCommands("claude", "C:\\Users\\Alex\\.claude-work", { homedir: "C:\\Users\\Alex", platform: "win32" })[1]!.text, /"\$env:USERPROFILE\\\.claude-work"/);
   // Anything unusual under the home folder keeps the full single-quoted path.
   assert.match(signInCommands("claude", "/home/alex/my $dir", { homedir: "/home/alex", platform: "linux" })[0]!.text, /'\/home\/alex\/my \$dir'/);
 });
@@ -274,6 +274,10 @@ test("displayPath shortens folders under the home folder only", () => {
   assert.equal(displayPath("/srv/accounts/.codex-ci", "/home/alex", "linux"), "/srv/accounts/.codex-ci");
   assert.equal(displayPath("C:\\Users\\Alex\\.codex-work", "c:\\users\\alex", "win32"), "~\\.codex-work");
   assert.equal(displayPath("D:\\accounts\\.claude-x", "C:\\Users\\Alex", "win32"), "D:\\accounts\\.claude-x");
+  // Lower-casing "İ" adds a character; the folder name must still come out whole.
+  assert.equal(displayPath("C:\\Users\\İrem\\.claude-work", "C:\\Users\\İrem", "win32"), "~\\.claude-work");
+  assert.equal(displayPath("C:\\Users\\irem\\.claude-work", "C:\\Users\\İrem", "win32"), "C:\\Users\\irem\\.claude-work");
+  assert.equal(displayPath("/home/alex/", "/home/alex", "linux"), "~");
 });
 
 test("a malformed credential file is reported without repeating its contents", async () => {

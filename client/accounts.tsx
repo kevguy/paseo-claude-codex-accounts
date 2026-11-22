@@ -59,24 +59,27 @@ function AccountCard({ account, platform, workspaceId, theme, onChanged, onOpenW
   const command = account.signIn.find((c) => c.shell === (platform === "win32" ? "powershell" : "posix"))?.text ?? account.signIn[0]?.text ?? "";
   return (
     <SettingsCard testID={`account-${account.id}`}>
-      <Pressable
-        onPress={() => setOpen((value) => !value)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${account.label}, ${STATE_LABEL[account.status.state]}. ${open ? "Hide" : "Show"} options`}
-        style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 4 }}
-      >
+      <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 4 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: stateColor(theme, account.status.state) }} />
           <Text style={{ color: theme.colors.foreground, fontSize: 15, fontWeight: "600" }}>{account.label}</Text>
           {account.isDefault ? <Text style={muted}>default</Text> : null}
           <View style={{ flex: 1 }} />
-          <Text style={muted}>{open ? "Less ▴" : "More ▾"}</Text>
+          {/* Only this toggle is a button, so screen readers still read the status text, and selecting the path doesn't toggle. */}
+          <Pressable
+            onPress={() => setOpen((value) => !value)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: open }}
+            accessibilityLabel={`${open ? "Hide" : "Show"} options for ${account.label}`}
+            hitSlop={8}
+          >
+            <Text style={muted}>{open ? "Less ▴" : "More ▾"}</Text>
+          </Pressable>
         </View>
         <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{statusLine(account.status)}</Text>
         <Text style={muted} selectable>{account.displayHome}</Text>
         {account.status.detail ? <Text style={{ ...muted, color: theme.colors.statusWarning }}>{account.status.detail}</Text> : null}
-      </Pressable>
+      </View>
       <SettingsSwitch
         label="Show in model picker"
         hint={account.enabled ? undefined : "Hidden. Its folder and login are kept."}

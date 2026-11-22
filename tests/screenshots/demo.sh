@@ -1,20 +1,47 @@
 #!/bin/sh
 # Rebuilds the fictional demo, runs an isolated Paseo daemon on 127.0.0.1:6791 and serves Paseo's
-# bundled web app on 127.0.0.1:6792 for screenshots. Stop both with: kill $(lsof -t -iTCP:6791 -iTCP:6792 -sTCP:LISTEN)
-# Usage: tests/screenshots/demo.sh <extracted Paseo app.asar dir>   (run from the repo root)
+# bundled web app on 127.0.0.1:6792 for screenshots. macOS only (uses /Applications/Paseo.app).
+# Usage, from the repo root:
+#   tests/screenshots/demo.sh <extracted Paseo app.asar dir>   start (restarts a previous demo)
+#   tests/screenshots/demo.sh --stop                           stop
 set -eu
-ASAR="$1"
 PASEO=/Applications/Paseo.app/Contents/Resources/bin/paseo
 D="$PWD/.validation/demo"
-for pid in $(lsof -nP -iTCP:6791 -iTCP:6792 -sTCP:LISTEN -t 2>/dev/null); do kill "$pid"; done
-pkill -f "daemon run --home $D/paseo-home" 2>/dev/null || true
-sleep 2
+RUN="$PWD/.validation/demo-run"
+
+# Only stop processes this script started, and only if their command line still matches.
+stop() {
+  for name in daemon web; do
+    [ -f "$RUN/$name.pid" ] || continue
+    pid=$(cat "$RUN/$name.pid")
+    case "$(ps -o command= -p "$pid" 2>/dev/null || true)" in
+      *"$D/paseo-home"*|*serve-app.mjs*6792*) kill "$pid" ;;
+    esac
+    rm -f "$RUN/$name.pid"
+  done
+}
+stop
+[ "${1:-}" = "--stop" ] && exit 0
+ASAR="$1"
+sleep 1
+for port in 6791 6792; do
+  if lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Port $port is in use by something this script didn't start; stop it first." >&2
+    exit 1
+  fi
+done
+
+# Your own accounts must never leak in: these variables would point the demo at real folders.
+unset CLAUDE_CONFIG_DIR CODEX_HOME
+mkdir -p "$RUN"
 rm -rf .validation/demo-plugin && mkdir -p .validation/demo-plugin
 cp -R paseo-plugin.json index.client.tsx index.server.ts client server shared package.json npm-shrinkwrap.json LICENSE .validation/demo-plugin/
 node tests/screenshots/fixture.mjs .validation/demo .validation/demo-plugin > /dev/null
 mkdir -p "$D/home/projects/acme-web"
-(cd "$D" && HOME="$D/home" PASEO_HOME="$D/paseo-home" nohup "$PASEO" daemon run --home "$D/paseo-home" > daemon.log 2>&1 &)
+HOME="$D/home" PASEO_HOME="$D/paseo-home" nohup "$PASEO" daemon run --home "$D/paseo-home" > "$D/daemon.log" 2>&1 &
+echo $! > "$RUN/daemon.pid"
 for i in $(seq 1 30); do grep -q "Plugin ready" "$D/daemon.log" 2>/dev/null && break; sleep 1; done
 HOME="$D/home" node tests/screenshots/add-project.mjs "$ASAR" "$D/paseo-home" "$D/home/projects/acme-web" > /dev/null
-(nohup node tests/screenshots/serve-app.mjs /Applications/Paseo.app/Contents/Resources/app-dist 6792 > "$D/web.log" 2>&1 &)
+nohup node tests/screenshots/serve-app.mjs /Applications/Paseo.app/Contents/Resources/app-dist 6792 > "$D/web.log" 2>&1 &
+echo $! > "$RUN/web.pid"
 echo "demo ready: daemon 127.0.0.1:6791, web app 127.0.0.1:6792"

@@ -94,13 +94,14 @@ mkdir -p ~/.codex-work  && CODEX_HOME=~/.codex-work codex login
 Windows (PowerShell):
 
 ```powershell
-New-Item -ItemType Directory -Force -Path "$HOME\.claude-work" | Out-Null; $env:CLAUDE_CONFIG_DIR = "$HOME\.claude-work"; claude auth login
-New-Item -ItemType Directory -Force -Path "$HOME\.codex-work" | Out-Null; $env:CODEX_HOME = "$HOME\.codex-work"; codex login
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude-work" | Out-Null; $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-work"; claude auth login
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codex-work" | Out-Null; $env:CODEX_HOME = "$env:USERPROFILE\.codex-work"; codex login
 ```
 
 Codex refuses to start when `CODEX_HOME` doesn't exist, which is why the folder comes first.
 In PowerShell the variable stays set for the rest of that window; run
-`Remove-Item Env:CLAUDE_CONFIG_DIR` (or `Env:CODEX_HOME`) afterwards, or close the window.
+`Remove-Item Env:CLAUDE_CONFIG_DIR` (or `Env:CODEX_HOME`) afterwards, or close the window. (The
+command Accounts gives you to copy clears it for you.)
 
 Check which account each folder holds: `claude auth status` (Claude) or `codex login status`
 (Codex), with the same variable set.
@@ -133,7 +134,7 @@ alias claude-work='CLAUDE_CONFIG_DIR="$HOME/.claude-work" claude'   # zsh or bas
 ```
 
 ```powershell
-function claude-work { $env:CLAUDE_CONFIG_DIR = "$HOME\.claude-work"; claude @args }   # PowerShell profile
+function claude-work { $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-work"; try { claude @args } finally { Remove-Item Env:CLAUDE_CONFIG_DIR } }   # PowerShell profile
 ```
 
 ### Things a new account doesn't share
@@ -174,8 +175,9 @@ CI runs the type check and tests on macOS, Linux and Windows.
 
 To redo the screenshots on macOS, build a fictional home and an isolated Paseo daemon
 (`tests/screenshots/demo.sh`), then drive Paseo's bundled web app with Playwright
-(`tests/screenshots/capture.mjs`). Neither touches your own Paseo config or accounts; the comments
-at the top of each file give the arguments. The design and verified facts
+(`tests/screenshots/capture.mjs`), and stop the demo with `tests/screenshots/demo.sh --stop`. They
+use a made-up home folder and their own Paseo home, clear `CLAUDE_CONFIG_DIR` and `CODEX_HOME`,
+and only stop processes they started. The comments at the top of each file give the arguments. The design and verified facts
 behind it are in [docs/DESIGN.md](docs/DESIGN.md).
 
 MIT licensed.

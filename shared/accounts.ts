@@ -37,12 +37,16 @@ export function accountLabel(kind: AccountKind, name: string): string {
 /** The part of `path` below the home folder (`""` for the home folder itself), or null when it isn't under it. */
 export function homeRelative(path: string, homedir: string, platform: string): string | null {
   const win = platform === "win32";
-  const norm = (value: string) => (win ? value.replace(/\//g, "\\").toLowerCase() : value).replace(/[\\/]+$/, "");
-  const sep = win ? "\\" : "/";
-  const base = norm(homedir), full = norm(path);
-  if (!base) return null;
-  if (full === base) return "";
-  return full.startsWith(base + sep) ? path.slice(base.length + 1).replace(/[\\/]+$/, "") : null;
+  const trim = (value: string) => value.replace(win ? /[\\/]+$/ : /\/+$/, "");
+  const home = trim(homedir), full = trim(path);
+  if (!home) return null;
+  // Compare the prefix without changing its length (lower-casing "İ" adds a character), then slice
+  // the original path at that same length.
+  const same = (a: string, b: string) => (win ? a.replace(/\//g, "\\").toLowerCase() === b.replace(/\//g, "\\").toLowerCase() : a === b);
+  if (full.length === home.length) return same(full, home) ? "" : null;
+  const separator = full[home.length];
+  const isSeparator = separator === "/" || (win && separator === "\\");
+  return isSeparator && same(full.slice(0, home.length), home) ? full.slice(home.length + 1) : null;
 }
 
 /** Shortens a path under the home folder to `~/…` (or `~\\…` on Windows) for display. */
@@ -67,7 +71,8 @@ export function powershellQuote(value: string): string {
 /**
  * Commands that sign one account in, for people to copy. Paths come from `os.homedir()` plus a
  * validated slug, but are still quoted for each shell. The PowerShell form clears the variable
- * afterwards so later commands in the same window use the default account again.
+ * afterwards, even when the login is cancelled, so later commands in that window use the default
+ * account again.
  *
  * `home` is null for a default account. Its variable must stay unset: Claude keys its macOS
  * Keychain item to CLAUDE_CONFIG_DIR, so setting it to `~/.claude` would sign in a separate login.
@@ -75,15 +80,16 @@ export function powershellQuote(value: string): string {
 export function signInCommands(kind: AccountKind, home: string | null, place?: { homedir: string; platform: string }): SignInCommand[] {
   const { envVar, login } = KIND_INFO[kind];
   if (home === null) return [{ shell: "posix", text: login.join(" ") }, { shell: "powershell", text: login.join(" ") }];
-  // A folder under the home folder is written as "$HOME/…", which is shorter, works for anyone who
-  // copies it, and matches the README. Only plain names qualify, so double quotes stay safe.
+  // A folder under the home folder is written relative to it, which is shorter and works for anyone
+  // who copies it. Only plain names qualify, so double quotes stay safe. PowerShell uses
+  // $env:USERPROFILE, the folder Node's os.homedir() returns on Windows; its $HOME can differ.
   const rest = place ? homeRelative(home, place.homedir, place.platform) : null;
   const plain = rest !== null && /^[A-Za-z0-9._-]+([\\/][A-Za-z0-9._-]+)*$/.test(rest);
   const posix = plain ? `"$HOME/${rest.replace(/\\/g, "/")}"` : posixQuote(home);
-  const ps = plain ? `"$HOME\\${rest.replace(/\//g, "\\")}"` : powershellQuote(home);
+  const ps = plain ? `"$env:USERPROFILE\\${rest.replace(/\//g, "\\")}"` : powershellQuote(home);
   return [
     { shell: "posix", text: `mkdir -p ${posix} && ${envVar}=${posix} ${login.join(" ")}` },
-    { shell: "powershell", text: `New-Item -ItemType Directory -Force -Path ${ps} | Out-Null; $env:${envVar} = ${ps}; ${login.join(" ")}; Remove-Item Env:${envVar}` },
+    { shell: "powershell", text: `New-Item -ItemType Directory -Force -Path ${ps} | Out-Null; $env:${envVar} = ${ps}; try { ${login.join(" ")} } finally { Remove-Item Env:${envVar} }` },
   ];
 }
 

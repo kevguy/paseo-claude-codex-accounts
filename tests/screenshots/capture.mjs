@@ -21,7 +21,7 @@ await page.waitForTimeout(1500);
 console.log("URL", page.url());
 await page.screenshot({ path: `${outDir}/accounts.png` });
 // Open one signed-in account's options for the second shot.
-await page.getByText("Codex (Work)").click();
+await page.getByTestId("account-codex-work").getByRole("button", { name: /Show options/ }).click();
 await page.waitForTimeout(500);
 const top = (locator) => locator.evaluate((element) => element.scrollIntoView({ block: "start" }));
 await top(page.getByText(/^Codex accounts/));
