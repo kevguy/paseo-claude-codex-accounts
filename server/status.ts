@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { AccountKind, AccountStatus } from "../shared/accounts";
 
 /**
@@ -43,12 +43,23 @@ export function macKeychainHas(service: string): Promise<boolean | null> {
   });
 }
 
+/**
+ * Reads a JSON file, or undefined when it doesn't exist. Errors name the file but never repeat its
+ * contents: JSON.parse quotes the start of a bad file, and these files can hold tokens.
+ */
 async function readJson(path: string): Promise<unknown | undefined> {
+  let raw: string;
   try {
-    return JSON.parse(await readFile(path, "utf8"));
+    raw = await readFile(path, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return undefined;
+    throw new Error(`${basename(path)} can't be read (${code ?? "unknown error"})`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`${basename(path)} isn't valid JSON`);
   }
 }
 
@@ -69,9 +80,9 @@ export async function claudeStatus(configDir: string | null, env: StatusEnv): Pr
     const identityPath = configDir ? join(configDir, ".claude.json") : join(env.homedir, ".claude.json");
     const credentialsPath = join(configDir ?? join(env.homedir, ".claude"), ".credentials.json");
     const identity = record(record(await readJson(identityPath))?.oauthAccount);
-    const credentials = record(await readJson(credentialsPath));
-    const oauth = record(credentials?.claudeAiOauth);
-    let hasCredential = Boolean(oauth);
+    // The file can hold MCP server logins too, so only a claudeAiOauth entry counts as signed in.
+    // Only that entry's presence is kept; its contents are dropped here.
+    let hasCredential = Boolean(record(record(await readJson(credentialsPath))?.claudeAiOauth));
     if (!hasCredential && env.platform === "darwin") {
       const has = await (env.keychainHas ?? macKeychainHas)(claudeKeychainService(configDir));
       if (has === null) return { state: "unknown", detail: "Couldn't check the macOS Keychain" };

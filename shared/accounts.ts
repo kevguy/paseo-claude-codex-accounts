@@ -34,59 +34,96 @@ export function accountLabel(kind: AccountKind, name: string): string {
   return `${KIND_INFO[kind].label} (${name.trim()})`;
 }
 
-/** Joins with the platform's separator without importing node:path, so the client can use it too. */
-export function joinHome(home: string, folder: string, platform: string): string {
-  const sep = platform === "win32" ? "\\" : "/";
-  return home.endsWith(sep) || home.endsWith("/") ? `${home}${folder}` : `${home}${sep}${folder}`;
+/** The part of `path` below the home folder (`""` for the home folder itself), or null when it isn't under it. */
+export function homeRelative(path: string, homedir: string, platform: string): string | null {
+  const win = platform === "win32";
+  const norm = (value: string) => (win ? value.replace(/\//g, "\\").toLowerCase() : value).replace(/[\\/]+$/, "");
+  const sep = win ? "\\" : "/";
+  const base = norm(homedir), full = norm(path);
+  if (!base) return null;
+  if (full === base) return "";
+  return full.startsWith(base + sep) ? path.slice(base.length + 1).replace(/[\\/]+$/, "") : null;
 }
 
-export type SignInCommand = { shell: "posix" | "powershell" | "cmd"; text: string };
+/** Shortens a path under the home folder to `~/…` (or `~\\…` on Windows) for display. */
+export function displayPath(path: string, homedir: string, platform: string): string {
+  const rest = homeRelative(path, homedir, platform);
+  if (rest === null) return path;
+  return rest ? `~${platform === "win32" ? "\\" : "/"}${rest}` : "~";
+}
+
+export type SignInCommand = { shell: "posix" | "powershell"; text: string };
+
+/** Single-quotes a value for POSIX shells. */
+export function posixQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Single-quotes a value for PowerShell, which also treats the typographic quotes ‘ ’ ‚ ‛ as quotes. */
+export function powershellQuote(value: string): string {
+  return `'${value.replace(/['\u2018\u2019\u201A\u201B]/g, (quote) => quote + quote)}'`;
+}
 
 /**
  * Commands that sign one account in, for people to copy. Paths come from `os.homedir()` plus a
- * validated slug, but are still quoted for each shell.
+ * validated slug, but are still quoted for each shell. The PowerShell form clears the variable
+ * afterwards so later commands in the same window use the default account again.
  *
  * `home` is null for a default account. Its variable must stay unset: Claude keys its macOS
  * Keychain item to CLAUDE_CONFIG_DIR, so setting it to `~/.claude` would sign in a separate login.
  */
-export function signInCommands(kind: AccountKind, home: string | null): SignInCommand[] {
+export function signInCommands(kind: AccountKind, home: string | null, place?: { homedir: string; platform: string }): SignInCommand[] {
   const { envVar, login } = KIND_INFO[kind];
   if (home === null) return [{ shell: "posix", text: login.join(" ") }, { shell: "powershell", text: login.join(" ") }];
-  const posixQuoted = `'${home.replace(/'/g, `'\\''`)}'`;
-  const psQuoted = `'${home.replace(/'/g, "''")}'`;
+  // A folder under the home folder is written as "$HOME/…", which is shorter, works for anyone who
+  // copies it, and matches the README. Only plain names qualify, so double quotes stay safe.
+  const rest = place ? homeRelative(home, place.homedir, place.platform) : null;
+  const plain = rest !== null && /^[A-Za-z0-9._-]+([\\/][A-Za-z0-9._-]+)*$/.test(rest);
+  const posix = plain ? `"$HOME/${rest.replace(/\\/g, "/")}"` : posixQuote(home);
+  const ps = plain ? `"$HOME\\${rest.replace(/\//g, "\\")}"` : powershellQuote(home);
   return [
-    { shell: "posix", text: `mkdir -p ${posixQuoted} && ${envVar}=${posixQuoted} ${login.join(" ")}` },
-    { shell: "powershell", text: `New-Item -ItemType Directory -Force -Path ${psQuoted} | Out-Null; $env:${envVar} = ${psQuoted}; ${login.join(" ")}` },
+    { shell: "posix", text: `mkdir -p ${posix} && ${envVar}=${posix} ${login.join(" ")}` },
+    { shell: "powershell", text: `New-Item -ItemType Directory -Force -Path ${ps} | Out-Null; $env:${envVar} = ${ps}; ${login.join(" ")}; Remove-Item Env:${envVar}` },
   ];
 }
 
 /**
+ * Runs a PowerShell script as `powershell.exe -EncodedCommand`. The script travels as base64 of
+ * UTF-16LE, so no quoting layer between Paseo's terminal and PowerShell can change it, whatever
+ * the folder path contains.
+ */
+export function powershellArgv(script: string): { command: string; args: string[] } {
+  const bytes: number[] = [];
+  for (let i = 0; i < script.length; i++) {
+    const unit = script.charCodeAt(i);
+    bytes.push(unit & 0xff, unit >> 8);
+  }
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return { command: "powershell.exe", args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", btoa(binary)] };
+}
+
+/**
  * argv for a Paseo terminal, which takes a command and arguments but no environment. `env` sets the
- * variable on macOS and Linux without depending on a shell; Windows goes through cmd.exe because
- * the CLIs may be .cmd shims that only cmd.exe can start.
+ * variable on macOS and Linux without depending on a shell. Windows uses PowerShell, which starts
+ * the CLIs whether they are .exe files or npm .cmd/.ps1 shims.
  */
 export function signInTerminalArgv(kind: AccountKind, home: string | null, platform: string): { command: string; args: string[] } {
   const { envVar, login } = KIND_INFO[kind];
-  if (home === null) {
-    return platform === "win32" ? { command: "cmd.exe", args: ["/d", "/s", "/c", login.join(" ")] } : { command: login[0]!, args: login.slice(1) };
-  }
   if (platform === "win32") {
-    if (/["%^&|<>]/.test(home)) throw new Error("This folder path can't be passed to cmd.exe safely; run the sign-in command yourself");
-    return { command: "cmd.exe", args: ["/d", "/s", "/c", `set "${envVar}=${home}"&& ${login.join(" ")}`] };
+    return powershellArgv(home === null ? login.join(" ") : `$env:${envVar} = ${powershellQuote(home)}; ${login.join(" ")}`);
   }
-  return { command: "env", args: [`${envVar}=${home}`, ...login] };
+  return home === null ? { command: login[0]!, args: login.slice(1) } : { command: "env", args: [`${envVar}=${home}`, ...login] };
 }
 
 const kind = z.enum(KINDS);
 
 export const accountStatus = z.object({
-  state: z.enum(["signed-in", "signed-out", "expired", "unknown"]),
+  state: z.enum(["signed-in", "signed-out", "unknown"]),
   /** Email of the signed-in user, when the CLI recorded one. */
   email: z.string().optional(),
   organization: z.string().optional(),
   plan: z.string().optional(),
-  /** ISO time the stored login expires, when known. */
-  expiresAt: z.string().optional(),
   detail: z.string().optional(),
 });
 export type AccountStatus = z.infer<typeof accountStatus>;
@@ -96,6 +133,8 @@ export const account = z.object({
   kind,
   label: z.string(),
   home: z.string(),
+  /** `home` shortened to start with `~` when it sits under the user's home folder. */
+  displayHome: z.string(),
   isDefault: z.boolean(),
   /** Created by this plugin (`claude-<slug>` / `codex-<slug>` with the env var set). Others are shown read-only. */
   managed: z.boolean(),

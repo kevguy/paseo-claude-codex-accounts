@@ -1,11 +1,12 @@
 /// <reference types="node" />
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
   KIND_INFO,
   KINDS,
   accountId,
   accountLabel,
+  displayPath,
   signInCommands,
   signInTerminalArgv,
   slugify,
@@ -23,6 +24,8 @@ export interface ConfigApi {
 
 export interface Host extends StatusEnv {
   config: ConfigApi;
+  /** The daemon's environment. A CLAUDE_CONFIG_DIR or CODEX_HOME here moves the default account. */
+  env?: Record<string, string | undefined>;
 }
 
 type Entry = { extends?: unknown; label?: unknown; env?: unknown; enabled?: unknown; order?: unknown };
@@ -36,13 +39,14 @@ function isKind(value: unknown): value is AccountKind {
 }
 
 /** One row per account: the two built-in providers plus every entry that extends one with its own folder. */
-export function accountsFromConfig(providers: Record<string, unknown> | undefined, host: Pick<Host, "homedir" | "platform">) {
-  const rows: Array<Omit<Account, "status" | "signIn"> & { defaultHome: boolean }> = [];
+export function accountsFromConfig(providers: Record<string, unknown> | undefined, host: Pick<Host, "homedir" | "platform" | "env">) {
+  const rows: Array<Omit<Account, "status" | "signIn" | "displayHome"> & { defaultHome: boolean }> = [];
   for (const kind of KINDS) {
     const override = (providers?.[kind] ?? {}) as Entry;
-    const envHome = typeof (override.env as Record<string, unknown> | undefined)?.[KIND_INFO[kind].envVar] === "string"
-      ? ((override.env as Record<string, string>)[KIND_INFO[kind].envVar])
-      : undefined;
+    const { envVar } = KIND_INFO[kind];
+    const configured = (override.env as Record<string, unknown> | undefined)?.[envVar];
+    // The built-in provider uses its own env entry first, then whatever the daemon inherited.
+    const envHome = (typeof configured === "string" && configured) || host.env?.[envVar] || undefined;
     rows.push({
       id: kind,
       kind,
@@ -97,6 +101,20 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, worker:
 
 const cache = new Map<string, { at: number; status: AccountStatus }>();
 
+/** The default Claude folder reads a different identity file and Keychain item, so it gets its own key. */
+function cacheKey(row: { kind: AccountKind; home: string; defaultHome: boolean }) {
+  return `${row.kind}\0${row.defaultHome ? "default" : "custom"}\0${row.home}`;
+}
+
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Runs config changes one at a time, so two quick adds can't both pass the duplicate check. */
+function serial<T>(work: () => Promise<T>): Promise<T> {
+  const result = queue.then(work, work);
+  queue = result.catch(() => undefined);
+  return result;
+}
+
 export function clearStatusCache() {
   cache.clear();
 }
@@ -106,22 +124,26 @@ export async function listAccounts(host: Host, options: { refresh?: boolean; now
   const rows = accountsFromConfig(config.providers, host);
   const now = options.now ?? Date.now();
   const statuses = await mapLimit(rows, STATUS_CONCURRENCY, async (row) => {
-    const key = `${row.kind}\0${row.home}`;
+    const key = cacheKey(row);
     const hit = cache.get(key);
     if (!options.refresh && hit && now - hit.at < STATUS_TTL_MS) return hit.status;
     const status = await readStatus(row.kind, row.home, row.defaultHome, host);
-    cache.set(key, { at: now, status });
+    cache.set(key, { at: options.now ?? Date.now(), status });
     return status;
   });
-  return rows.map(({ defaultHome, ...row }, index) => ({ ...row, status: statuses[index]!, signIn: signInCommands(row.kind, defaultHome ? null : row.home) }));
+  return rows.map(({ defaultHome, ...row }, index) => ({ ...row, displayHome: displayPath(row.home, host.homedir, host.platform), status: statuses[index]!, signIn: signInCommands(row.kind, defaultHome ? null : row.home, host) }));
 }
 
-export async function addAccount(host: Host, kind: AccountKind, name: string): Promise<Account> {
+export function addAccount(host: Host, kind: AccountKind, name: string): Promise<Account> {
+  return serial(() => addAccountNow(host, kind, name));
+}
+
+async function addAccountNow(host: Host, kind: AccountKind, name: string): Promise<Account> {
   const slug = slugify(name);
   if (!slug) throw new Error("Use a name with at least one letter or number");
   const id = accountId(kind, slug);
   const { config } = await host.config.get();
-  if (config.providers?.[id] !== undefined) throw new Error(`There is already a provider called ${id}`);
+  if (config.providers?.[id] !== undefined) throw new Error(`"${name.trim()}" becomes the provider id ${id}, which already exists. Choose a different name.`);
   const label = accountLabel(kind, name);
   const existing = accountsFromConfig(config.providers, host);
   if (existing.some((row) => row.label.toLowerCase() === label.toLowerCase())) throw new Error(`There is already an account called ${label}`);
@@ -134,26 +156,40 @@ export async function addAccount(host: Host, kind: AccountKind, name: string): P
   return created;
 }
 
-export async function updateAccount(host: Host, id: string, change: { label?: string; enabled?: boolean }) {
+export function updateAccount(host: Host, id: string, change: { label?: string; enabled?: boolean }) {
+  return serial(() => updateAccountNow(host, id, change));
+}
+
+async function updateAccountNow(host: Host, id: string, change: { label?: string; enabled?: boolean }) {
   const { config } = await host.config.get();
   const row = accountsFromConfig(config.providers, host).find((item) => item.id === id);
   if (!row) throw new Error("That account no longer exists");
-  if (change.label !== undefined && !row.managed) throw new Error("Only accounts added here can be renamed here");
+  const label = change.label?.trim();
+  if (label !== undefined) {
+    if (!row.managed) throw new Error("Only accounts added here can be renamed here");
+    if (!label) throw new Error("An account needs a name");
+    const others = accountsFromConfig(config.providers, host).filter((item) => item.id !== id);
+    if (others.some((item) => item.label.toLowerCase() === label.toLowerCase())) throw new Error(`There is already an account called ${label}`);
+  }
   const patch: Record<string, unknown> = {};
-  if (change.label !== undefined) patch.label = change.label;
+  if (label !== undefined) patch.label = label;
   if (change.enabled !== undefined) patch.enabled = change.enabled;
   if (Object.keys(patch).length) await host.config.patch({ providers: { [id]: patch } });
   return { ok: true as const };
 }
 
 /** Removes the provider entry. The folder, and the login inside it, stays until the user deletes it. */
-export async function removeAccount(host: Host, id: string) {
+export function removeAccount(host: Host, id: string) {
+  return serial(() => removeAccountNow(host, id));
+}
+
+async function removeAccountNow(host: Host, id: string) {
   const { config } = await host.config.get();
   const row = accountsFromConfig(config.providers, host).find((item) => item.id === id);
   if (!row) throw new Error("That account no longer exists");
   if (!row.managed) throw new Error("Only accounts added here can be removed here");
   await host.config.patch({ removeProviders: [id] });
-  cache.delete(`${row.kind}\0${row.home}`);
+  cache.delete(cacheKey(row));
   return { ok: true as const, home: row.home };
 }
 
@@ -161,6 +197,7 @@ export async function signInArgv(host: Host, id: string) {
   const { config } = await host.config.get();
   const row = accountsFromConfig(config.providers, host).find((item) => item.id === id);
   if (!row) throw new Error("That account no longer exists");
+  if (!row.defaultHome && !isAbsolute(row.home)) throw new Error(`${row.label} uses the folder "${row.home}", which isn't a full path. Fix it in Paseo's config.`);
   if (!row.defaultHome) await mkdir(row.home, { recursive: true });
   return { row, ...signInTerminalArgv(row.kind, row.defaultHome ? null : row.home, host.platform) };
 }

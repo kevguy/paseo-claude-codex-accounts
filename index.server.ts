@@ -7,7 +7,7 @@ import { addRpc, listRpc, removeRpc, signInRpc, updateRpc, workspacesRpc } from 
 type Paseo = PluginHandlerContext["paseo"];
 
 function host(paseo: Paseo): Host {
-  return { config: paseo.config as unknown as ConfigApi, homedir: homedir(), platform: process.platform };
+  return { config: paseo.config as unknown as ConfigApi, homedir: homedir(), platform: process.platform, env: process.env };
 }
 
 async function listWorkspaces(paseo: Paseo) {

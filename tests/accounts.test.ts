@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { accountsFromConfig, addAccount, clearStatusCache, listAccounts, mapLimit, removeAccount, signInArgv, updateAccount, type ConfigApi, type Host } from "../server/accounts";
 import { claudeKeychainService, claudeStatus, codexStatus, jwtClaims } from "../server/status";
-import { signInCommands, signInTerminalArgv, slugify } from "../shared/accounts";
+import { displayPath, powershellArgv, powershellQuote, signInCommands, signInTerminalArgv, slugify } from "../shared/accounts";
 
 const fixtures = join(process.cwd(), ".validation", "accounts");
 let sequence = 0;
@@ -57,17 +58,41 @@ test("Keychain item names match Claude's per-folder naming", () => {
 test("sign-in commands set the folder for extra accounts but never for the default", () => {
   const [posix, ps] = signInCommands("claude", "/home/alex/.claude-work");
   assert.equal(posix!.text, "mkdir -p '/home/alex/.claude-work' && CLAUDE_CONFIG_DIR='/home/alex/.claude-work' claude auth login");
-  assert.equal(ps!.text, "New-Item -ItemType Directory -Force -Path '/home/alex/.claude-work' | Out-Null; $env:CLAUDE_CONFIG_DIR = '/home/alex/.claude-work'; claude auth login");
+  assert.equal(ps!.text, "New-Item -ItemType Directory -Force -Path '/home/alex/.claude-work' | Out-Null; $env:CLAUDE_CONFIG_DIR = '/home/alex/.claude-work'; claude auth login; Remove-Item Env:CLAUDE_CONFIG_DIR");
   assert.deepEqual(signInCommands("codex", null).map((c) => c.text), ["codex login", "codex login"]);
   assert.match(signInCommands("claude", "/home/o'neil/.claude-a")[0]!.text, /'\/home\/o'\\''neil\/\.claude-a'/);
+  const [shortPosix, shortPs] = signInCommands("codex", "/home/alex/.codex-work", { homedir: "/home/alex", platform: "linux" });
+  assert.equal(shortPosix!.text, 'mkdir -p "$HOME/.codex-work" && CODEX_HOME="$HOME/.codex-work" codex login');
+  assert.equal(shortPs!.text, 'New-Item -ItemType Directory -Force -Path "$HOME\\.codex-work" | Out-Null; $env:CODEX_HOME = "$HOME\\.codex-work"; codex login; Remove-Item Env:CODEX_HOME');
+  assert.match(signInCommands("claude", "C:\\Users\\Alex\\.claude-work", { homedir: "C:\\Users\\Alex", platform: "win32" })[1]!.text, /"\$HOME\\\.claude-work"/);
+  // Anything unusual under the home folder keeps the full single-quoted path.
+  assert.match(signInCommands("claude", "/home/alex/my $dir", { homedir: "/home/alex", platform: "linux" })[0]!.text, /'\/home\/alex\/my \$dir'/);
 });
 
-test("terminal argv needs no shell on POSIX and uses cmd.exe on Windows", () => {
+const decodeEncodedCommand = (args: string[]) => Buffer.from(args.at(-1)!, "base64").toString("utf16le");
+
+test("terminal argv needs no shell on POSIX and passes an encoded script to PowerShell on Windows", () => {
   assert.deepEqual(signInTerminalArgv("codex", "/home/alex/.codex-work", "linux"), { command: "env", args: ["CODEX_HOME=/home/alex/.codex-work", "codex", "login"] });
   assert.deepEqual(signInTerminalArgv("claude", null, "darwin"), { command: "claude", args: ["auth", "login"] });
-  assert.deepEqual(signInTerminalArgv("claude", "C:\\Users\\alex\\.claude-work", "win32"), { command: "cmd.exe", args: ["/d", "/s", "/c", 'set "CLAUDE_CONFIG_DIR=C:\\Users\\alex\\.claude-work"&& claude auth login'] });
-  assert.deepEqual(signInTerminalArgv("codex", null, "win32"), { command: "cmd.exe", args: ["/d", "/s", "/c", "codex login"] });
-  assert.throws(() => signInTerminalArgv("claude", "C:\\Users\\a&b\\.claude-x", "win32"), /cmd\.exe/);
+  const work = signInTerminalArgv("claude", "C:\\Users\\O\u2019Brien & Co\\.claude-work", "win32");
+  assert.equal(work.command, "powershell.exe");
+  assert.deepEqual(work.args.slice(0, -1), ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand"]);
+  assert.match(work.args.at(-1)!, /^[A-Za-z0-9+/=]+$/);
+  assert.equal(decodeEncodedCommand(work.args), "$env:CLAUDE_CONFIG_DIR = 'C:\\Users\\O\u2019\u2019Brien & Co\\.claude-work'; claude auth login");
+  assert.equal(decodeEncodedCommand(signInTerminalArgv("codex", null, "win32").args), "codex login");
+});
+
+test("PowerShell quoting doubles ASCII and typographic single quotes", () => {
+  assert.equal(powershellQuote("C:\\Users\\o'neil"), "'C:\\Users\\o''neil'");
+  assert.equal(powershellQuote("\u2018a\u2019b\u201Ac\u201Bd"), "'\u2018\u2018a\u2019\u2019b\u201A\u201Ac\u201B\u201Bd'");
+});
+
+test("on Windows, the encoded script sets the variable to the exact path", { skip: process.platform !== "win32" }, () => {
+  const path = "C:\\Users\\O\u2019Brien & Co\\it's \"quoted\" %PATH% ^ | < >\\.claude-work";
+  const { command, args } = powershellArgv(`$env:CLAUDE_CONFIG_DIR = ${powershellQuote(path)}; [Console]::OutputEncoding = [Text.Encoding]::UTF8; Write-Output $env:CLAUDE_CONFIG_DIR`);
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), path);
 });
 
 test("accounts come from the defaults plus every entry with its own folder, for any number of accounts", () => {
@@ -240,4 +265,58 @@ test("status checks run with bounded concurrency", async () => {
   });
   assert.equal(peak, 3);
   assert.deepEqual(results, Array.from({ length: 12 }, (_, i) => i * 2));
+});
+
+test("displayPath shortens folders under the home folder only", () => {
+  assert.equal(displayPath("/Users/alex/.claude-work", "/Users/alex", "darwin"), "~/.claude-work");
+  assert.equal(displayPath("/Users/alex", "/Users/alex/", "linux"), "~");
+  assert.equal(displayPath("/Users/alexandra/.claude", "/Users/alex", "darwin"), "/Users/alexandra/.claude");
+  assert.equal(displayPath("/srv/accounts/.codex-ci", "/home/alex", "linux"), "/srv/accounts/.codex-ci");
+  assert.equal(displayPath("C:\\Users\\Alex\\.codex-work", "c:\\users\\alex", "win32"), "~\\.codex-work");
+  assert.equal(displayPath("D:\\accounts\\.claude-x", "C:\\Users\\Alex", "win32"), "D:\\accounts\\.claude-x");
+});
+
+test("a malformed credential file is reported without repeating its contents", async () => {
+  const home = await fakeHome();
+  await mkdir(join(home, ".claude"), { recursive: true });
+  await writeFile(join(home, ".claude", ".credentials.json"), "sk-ant-oat01-SECRETSECRET");
+  await mkdir(join(home, ".codex"), { recursive: true });
+  await writeFile(join(home, ".codex", "auth.json"), "sk-proj-SECRETSECRET");
+  const env = { platform: "linux" as const, homedir: home };
+  for (const status of [await claudeStatus(null, env), await codexStatus(join(home, ".codex"), env)]) {
+    assert.equal(status.state, "unknown");
+    assert.match(status.detail!, /isn't valid JSON/);
+    assert.doesNotMatch(JSON.stringify(status), /sk-|SECRET/);
+  }
+  await rm(home, { recursive: true, force: true });
+});
+
+test("concurrent adds of the same name create one account, and renames keep labels unique", async () => {
+  const home = await fakeHome();
+  const config = fakeConfig();
+  const host = makeHost(home, config.api);
+  const results = await Promise.allSettled([addAccount(host, "claude", "Work"), addAccount(host, "claude", "work")]);
+  assert.deepEqual(results.map((r) => r.status), ["fulfilled", "rejected"]);
+  assert.match(String((results[1] as PromiseRejectedResult).reason), /becomes the provider id claude-work/);
+  await addAccount(host, "claude", "Personal");
+  await assert.rejects(updateAccount(host, "claude-personal", { label: "claude (work)" }), /already an account called/);
+  await assert.rejects(updateAccount(host, "claude-personal", { label: "  " }), /needs a name/);
+  await updateAccount(host, "claude-personal", { label: " Claude (Home) " });
+  assert.equal(config.providers["claude-personal"]!.label, "Claude (Home)");
+  await rm(home, { recursive: true, force: true });
+});
+
+test("a folder variable in the daemon's environment moves the default account", () => {
+  const rows = accountsFromConfig({}, { homedir: "/home/alex", platform: "linux", env: { CODEX_HOME: "/srv/codex" } });
+  const codex = rows.find((row) => row.id === "codex")!;
+  assert.equal(codex.home, "/srv/codex");
+  assert.equal(codex.defaultHome, false);
+  assert.equal(rows.find((row) => row.id === "claude")!.defaultHome, true);
+});
+
+test("sign-in refuses a folder that isn't a full path", async () => {
+  const home = await fakeHome();
+  const config = fakeConfig({ "claude-odd": { extends: "claude", env: { CLAUDE_CONFIG_DIR: "~/.claude-odd" } } });
+  await assert.rejects(signInArgv(makeHost(home, config.api), "claude-odd"), /isn't a full path/);
+  await rm(home, { recursive: true, force: true });
 });

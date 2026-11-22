@@ -6,6 +6,16 @@ settings and history. Accounts adds, signs in, checks, hides and removes them fr
 
 Works on macOS, Linux and Windows.
 
+![Accounts in Paseo: four Claude accounts with their email, organisation and plan, one of them hidden and not signed in](docs/screenshots/accounts.png)
+
+<p>
+  <img src="docs/screenshots/accounts-codex.png" alt="A Codex account opened to show sign-in, its copyable sign-in command and Remove" width="49%">
+  <img src="docs/screenshots/accounts-add.png" alt="Adding an account named Client B, which will use the folder ~/.claude-client-b" width="49%">
+</p>
+
+<sub>Screenshots use made-up accounts. They come from Paseo's own web app driven by
+`tests/screenshots`.</sub>
+
 ## What you can do
 
 - **Add an account.** Pick Claude or Codex, type a name such as "Work", and it appears in the
@@ -60,7 +70,7 @@ restart. On macOS, Claude stores each folder's login under its own Keychain item
 never overwrite each other.
 
 Status comes from each account's own files: the identity Claude records in `.claude.json`, the
-identity claims in Codex's `auth.json`, and whether a login exists. Accounts never reads, shows or
+identity claims in Codex's `auth.json`, and whether a login exists. Accounts never shows, logs or
 sends a token, and never reads a Keychain secret; it only checks that the item exists.
 
 ## Setting an account up by hand
@@ -89,6 +99,8 @@ New-Item -ItemType Directory -Force -Path "$HOME\.codex-work" | Out-Null; $env:C
 ```
 
 Codex refuses to start when `CODEX_HOME` doesn't exist, which is why the folder comes first.
+In PowerShell the variable stays set for the rest of that window; run
+`Remove-Item Env:CLAUDE_CONFIG_DIR` (or `Env:CODEX_HOME`) afterwards, or close the window.
 
 Check which account each folder holds: `claude auth status` (Claude) or `codex login status`
 (Codex), with the same variable set.
@@ -158,7 +170,12 @@ npm run typecheck
 npm test
 ```
 
-CI runs the type check and tests on macOS, Linux and Windows. The design and verified facts
+CI runs the type check and tests on macOS, Linux and Windows.
+
+To redo the screenshots on macOS, build a fictional home and an isolated Paseo daemon
+(`tests/screenshots/demo.sh`), then drive Paseo's bundled web app with Playwright
+(`tests/screenshots/capture.mjs`). Neither touches your own Paseo config or accounts; the comments
+at the top of each file give the arguments. The design and verified facts
 behind it are in [docs/DESIGN.md](docs/DESIGN.md).
 
 MIT licensed.
