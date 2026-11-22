@@ -102,3 +102,13 @@ PowerShell).
 
 Cursor, sharing settings, skills or MCP between accounts, deleting account
 folders, and automatic account rotation.
+
+## Release checklist (Kevin, 2026-11-22)
+
+- Screenshots before finalising and publishing: README and directory listing.
+  Render the real current components with synthetic, schema-valid fixtures
+  (fictional accounts, never real emails or orgs), captured via CDP or
+  Playwright in an ephemeral profile. Inspect every image. See
+  `lessons-paseo-plugins.md` § Portable state and public demos.
+- README manual setup steps for Claude and Codex, in POSIX and PowerShell forms.
+- CI green on macOS, Linux and Windows.
