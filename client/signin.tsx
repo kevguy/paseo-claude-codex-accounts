@@ -8,6 +8,21 @@ import { signInCancelRpc, signInCodeRpc, signInStartRpc, signInViewRpc, type Sig
 type Theme = PluginSurfaceProps["theme"];
 
 /**
+ * True once the component has unmounted: the user closed the screen, collapsed the card, or Paseo
+ * moved the screen to another host. A reply that arrives after that belongs to a screen that's gone.
+ */
+export function useLeft() {
+  const left = useRef(false);
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
+  return left;
+}
+
+/**
  * Signing an account in without a terminal. Works from a phone: Claude's page shows a code to paste
  * here, and Codex can show a device code to enter on any browser.
  */
@@ -18,14 +33,20 @@ export function SignInHere({ account, theme, onDone }: { account: Account; theme
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
   const input = useRef<SettingsInputHandle>(null);
+  const left = useLeft();
   const muted = { color: theme.colors.foregroundMuted, fontSize: 12 };
 
   // Follow the session until it finishes; the sign-in happens in another tab or device.
   useEffect(() => {
     if (!session || session.view.state !== "waiting") return;
+    // A reply that lands after Stop, the end of this session, or leaving the screen is ignored.
+    let live = true;
     const timer = setInterval(() => {
       void view({ sessionId: session.id }).then((next) => {
+        if (!live) return;
         if (next.state === "waiting") return setSession((current) => (current ? { ...current, view: next } : current));
+        // This reply ends the session; a second poll still in flight must not report it again.
+        live = false;
         setSession(null);
         if (next.state === "done") {
           if (next.warning) toast.error(next.warning);
@@ -34,7 +55,10 @@ export function SignInHere({ account, theme, onDone }: { account: Account; theme
         } else toast.error(next.error);
       }).catch(() => undefined);
     }, 2000);
-    return () => clearInterval(timer);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
   }, [session?.id, session?.view.state]);
 
   // Leaving the screen ends a sign-in that hasn't finished.
@@ -46,10 +70,13 @@ export function SignInHere({ account, theme, onDone }: { account: Account; theme
     setBusy(true);
     try {
       const started = await start({ accountId: account.id, method });
+      // Starting can take a while (Claude waits up to 20 s for its page). If the user has left by then,
+      // end the sign-in on the host it started on and open nothing.
+      if (left.current) return void cancel({ sessionId: started.sessionId }).catch(() => undefined);
       setSession({ id: started.sessionId, view: started.view });
       if (started.view.state === "waiting" && (account.kind === "claude" || method === "browser")) await openExternalUrl(started.view.url).catch(() => undefined);
     } catch (error) {
-      toast.error((error as Error).message);
+      if (!left.current) toast.error((error as Error).message);
     } finally {
       setBusy(false);
     }

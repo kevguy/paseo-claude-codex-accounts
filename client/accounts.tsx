@@ -3,7 +3,7 @@ import { SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsS
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { SignInHere } from "./signin";
+import { SignInHere, useLeft } from "./signin";
 import { SwitchingSettings } from "./switching";
 import { KINDS, KIND_INFO, addRpc, listRpc, removeRpc, signInRpc, slugify, updateRpc, workspacesRpc, type Account, type AccountKind, type AccountStatus } from "../shared/accounts";
 
@@ -38,6 +38,7 @@ function AccountCard({ account, platform, workspaceId, inPanel, theme, onChanged
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const left = useLeft();
   // Signed-in accounts stay compact so a long list is easy to scan; the rest open their options.
   const [open, setOpen] = useState(account.status.state !== "signed-in");
   // The second press has to follow soon after the first; otherwise the button resets.
@@ -100,7 +101,8 @@ function AccountCard({ account, platform, workspaceId, inPanel, theme, onChanged
           disabled={busy || !workspaceId}
           onPress={() => workspaceId && run(async () => {
             await signIn({ id: account.id, workspaceId });
-            onOpenWorkspace?.(workspaceId);
+            // The terminal opened, but a user who has left shouldn't be pulled back to its workspace.
+            if (!left.current) onOpenWorkspace?.(workspaceId);
           }, "Sign-in terminal opened. Press Refresh below when you're done.", false)}
         />
         <SettingsAction label="Sign-in command" hint={command} actionLabel="Copy" onPress={() => void copyText(command).then(() => toast.show("Copied"))} />
